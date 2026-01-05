@@ -187,26 +187,27 @@
                         <th class="sortable" onclick="sortTable('security_name')">銘柄名</th>
                         <th class="text-end">保有数量</th>
                         <th class="text-end">平均取得単価</th>
-                        <th class="sortable text-end" onclick="sortTable('total_cost')">取得コスト</th>
                         <th class="text-end">現在株価</th>
+                        <th class="sortable text-end" onclick="sortTable('total_cost')">取得コスト</th>
                         <th class="sortable text-end" onclick="sortTable('current_value')">評価額</th>
                         <th class="text-end">未実現損益</th>
                         <th class="text-end">損益率</th>
-                        <th class="text-center">操作</th>
                     </tr>
                 </thead>
                 <tbody id="holdings-tbody">
                     <tr>
-                        <td colspan="10" class="text-center">
+                        <td colspan="9" class="text-center">
                             <div class="loading">データを読み込み中...</div>
                         </td>
                     </tr>
                 </tbody>
                 <tfoot id="holdings-tfoot" class="table-light d-none">
                     <tr>
-                        <td colspan="4" class="text-end"><strong>合計</strong></td>
+                        <td colspan="5" class="text-end"><strong>合計</strong></td>
                         <td class="text-end" id="total-cost"><strong>-</strong></td>
-                        <td colspan="5"></td>
+                        <td class="text-end" id="total-value"><strong>-</strong></td>
+                        <td class="text-end" id="total-pnl"><strong>-</strong></td>
+                        <td></td>
                     </tr>
                 </tfoot>
             </table>
@@ -497,8 +498,8 @@
                     <td>${h.security_name || '-'}</td>
                     <td class="text-end">${formatNumber(h.total_quantity)}</td>
                     <td class="text-end">${formatCurrency(h.average_cost)} ${h.currency}</td>
-                    <td class="text-end">${h.total_cost ? formatCurrency(h.total_cost) : '-'}</td>
                     <td class="text-end">${formatPriceWithConversion(h.current_price, h.currency)}</td>
+                    <td class="text-end">${h.total_cost ? formatCurrency(h.total_cost) : '-'}</td>
                     <td class="text-end">${formatValueInJPY(h.current_value, h.currency)}</td>
                     <td class="text-end ${pnlClass}">
                         ${unrealizedPnL !== null ? formatCurrency(unrealizedPnL) : '-'}
@@ -506,18 +507,28 @@
                     <td class="text-end ${pnlClass}">
                         ${unrealizedPnLPct !== null ? formatPercentage(unrealizedPnLPct) : '-'}
                     </td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-danger" onclick="deleteHolding('${h.ticker_symbol}', '${h.security_name || h.ticker_symbol}')">
-                            削除
-                        </button>
-                    </td>
                 </tr>
             `;
         }).join('');
 
-        // Calculate and display total cost
+        // Calculate and display totals
         const totalCost = holdingsData.reduce((sum, h) => sum + (parseFloat(h.total_cost) || 0), 0);
+        const totalValue = holdingsData.reduce((sum, h) => {
+            const valueJPY = convertToJPY(h.current_value, h.currency);
+            return sum + (valueJPY || 0);
+        }, 0);
+        const totalPnL = holdingsData.reduce((sum, h) => {
+            const pnl = calculateUnrealizedPnL(h);
+            return sum + (pnl || 0);
+        }, 0);
+
         document.getElementById('total-cost').innerHTML = `<strong>${formatCurrency(totalCost)}</strong>`;
+        document.getElementById('total-value').innerHTML = `<strong>${formatCurrency(totalValue)}</strong>`;
+
+        const pnlClass = totalPnL >= 0 ? 'positive' : 'negative';
+        document.getElementById('total-pnl').innerHTML = `<strong class="${pnlClass}">${formatCurrency(totalPnL)}</strong>`;
+        document.getElementById('total-pnl').className = `text-end ${pnlClass}`;
+
         document.getElementById('holdings-tfoot').classList.remove('d-none');
 
         // Create holdings bar chart for P&L
@@ -578,7 +589,7 @@
             const fieldMap = {
                 'ticker_symbol': 0,
                 'security_name': 1,
-                'total_cost': 4,
+                'total_cost': 5,
                 'current_value': 6
             };
             const index = fieldMap[currentSortField];
@@ -586,33 +597,6 @@
                 const headers = document.querySelectorAll('#holdings-table thead th');
                 headers[index].classList.add(currentSortDirection);
             }
-        }
-    }
-
-    // 保有銘柄の削除
-    async function deleteHolding(ticker, name) {
-        if (!confirm(`${name} (${ticker}) を削除してもよろしいですか？\n\nこの操作により、以下のデータがすべて削除されます：\n- 保有銘柄情報\n- 関連する取引履歴\n- 配当データ\n- 確定損益データ\n\nこの操作は元に戻せません。`)) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/holdings/${ticker}`, {
-                method: 'DELETE'
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                alert(`${name} を削除しました\n\n削除されたデータ：\n- 取引: ${result.deleted.transactions}件\n- 配当: ${result.deleted.dividends}件\n- 確定損益: ${result.deleted.realized_pnl}件`);
-
-                // ダッシュボードを再読み込み
-                await loadDashboardData();
-            } else {
-                alert('削除に失敗しました：\n' + result.error);
-            }
-        } catch (error) {
-            console.error('削除エラー:', error);
-            alert('削除に失敗しました');
         }
     }
 
