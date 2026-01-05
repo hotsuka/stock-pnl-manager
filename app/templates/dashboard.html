@@ -475,6 +475,32 @@
         return `${priceStr} ${currency}`;
     }
 
+    // 株価を表示用にフォーマット（現在株価 + JPY換算 + 前日終値）
+    function formatPriceWithPreviousClose(currentPrice, previousClose, currency) {
+        if (!currentPrice) return '-';
+
+        const priceStr = formatCurrency(currentPrice);
+        let result = priceStr;
+
+        // Add currency for foreign stocks
+        if (currency !== 'JPY' && currency !== '日本円') {
+            result += ` ${currency}`;
+
+            // Add JPY conversion
+            const jpyAmount = convertToJPY(currentPrice, currency);
+            if (jpyAmount && jpyAmount !== currentPrice) {
+                result += `<br><small>(${formatCurrency(jpyAmount)} JPY)</small>`;
+            }
+        }
+
+        // Add previous close
+        if (previousClose !== null && previousClose !== undefined) {
+            result += `<br><small style="color: #6c757d;">(前日: ${formatCurrency(previousClose)})</small>`;
+        }
+
+        return result;
+    }
+
     // 評価額を表示用にフォーマット（JPYのみ）
     function formatValueInJPY(value, currency) {
         if (!value) return '-';
@@ -531,7 +557,7 @@
                     <td>${h.security_name || '-'}</td>
                     <td class="text-end">${formatNumber(h.total_quantity)}</td>
                     <td class="text-end">${formatCurrency(h.average_cost)} ${h.currency}</td>
-                    <td class="text-end">${formatPriceWithConversion(h.current_price, h.currency)}</td>
+                    <td class="text-end">${formatPriceWithPreviousClose(h.current_price, h.previous_close, h.currency)}</td>
                     <td class="text-end">${h.total_cost ? formatCurrency(h.total_cost) : '-'}</td>
                     <td class="text-end">${formatValueInJPY(h.current_value, h.currency)}</td>
                     <td class="text-end ${pnlClass}">
