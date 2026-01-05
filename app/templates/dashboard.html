@@ -426,13 +426,17 @@
 
     // 通貨をJPYに換算
     function convertToJPY(amount, currency) {
-        if (!amount) return null;
-        if (currency === 'JPY' || currency === '日本円') return amount;
+        if (amount === null || amount === undefined) return null;
+
+        const numAmount = parseFloat(amount);
+        if (isNaN(numAmount)) return null;
+
+        if (currency === 'JPY' || currency === '日本円') return numAmount;
 
         const rate = exchangeRates[currency]?.rate;
-        if (!rate) return amount;  // レートがない場合は元の金額を返す
+        if (!rate) return numAmount;  // レートがない場合は元の金額を返す
 
-        return amount * rate;
+        return numAmount * rate;
     }
 
     // 株価を表示用にフォーマット（元の通貨 + JPY換算）
@@ -463,10 +467,16 @@
 
     // 未実現損益を計算（評価額(JPY) - 取得コスト）
     function calculateUnrealizedPnL(holding) {
-        if (!holding.current_value || !holding.total_cost) return null;
+        if (holding.current_value === null || holding.current_value === undefined ||
+            holding.total_cost === null || holding.total_cost === undefined) {
+            return null;
+        }
 
         const currentValueJPY = convertToJPY(holding.current_value, holding.currency);
+        if (currentValueJPY === null) return null;
+
         const totalCost = parseFloat(holding.total_cost);
+        if (isNaN(totalCost)) return null;
 
         return currentValueJPY - totalCost;
     }
@@ -520,11 +530,11 @@
         const totalCost = holdingsData.reduce((sum, h) => sum + (parseFloat(h.total_cost) || 0), 0);
         const totalValue = holdingsData.reduce((sum, h) => {
             const valueJPY = convertToJPY(h.current_value, h.currency);
-            return sum + (valueJPY || 0);
+            return sum + (valueJPY !== null && !isNaN(valueJPY) ? valueJPY : 0);
         }, 0);
         const totalPnL = holdingsData.reduce((sum, h) => {
             const pnl = calculateUnrealizedPnL(h);
-            return sum + (pnl || 0);
+            return sum + (pnl !== null && !isNaN(pnl) ? pnl : 0);
         }, 0);
 
         document.getElementById('total-cost').innerHTML = `<strong>${formatCurrency(totalCost)}</strong>`;
