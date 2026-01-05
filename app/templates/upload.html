@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}CSV取り込み - Stock P&L Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <h2>SBI証券 取引履歴CSV取り込み</h2>
+        <hr>
+
+        <!-- アップロードフォーム -->
+        <div class="card">
+            <div class="card-body">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="csvFile" class="form-label">CSVファイルを選択</label>
+                        <input class="form-control" type="file" id="csvFile" name="file" accept=".csv" required>
+                        <div class="form-text">
+                            SBI証券からダウンロードした取引履歴CSVファイルを選択してください（最大10MB）
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="uploadBtn">
+                        <span class="spinner-border spinner-border-sm d-none" id="uploadSpinner"></span>
+                        アップロード
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 結果表示エリア -->
+        <div id="resultArea" class="mt-4 d-none">
+            <div class="alert" role="alert" id="resultMessage"></div>
+            
+            <div id="resultDetails" class="card">
+                <div class="card-body">
+                    <h5>処理結果</h5>
+                    <ul id="resultList"></ul>
+                </div>
+            </div>
+
+            <!-- エラー詳細 -->
+            <div id="errorDetails" class="card mt-3 d-none">
+                <div class="card-body">
+                    <h5 class="text-danger">エラー詳細</h5>
+                    <p class="text-muted">以下のデータの処理に失敗しました。内容を確認して修正してください。</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered" id="errorTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 80px;">行番号</th>
+                                    <th style="width: 150px;">エラー種別</th>
+                                    <th style="width: 250px;">エラー内容</th>
+                                    <th>データ内容</th>
+                                </tr>
+                            </thead>
+                            <tbody id="errorTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData();
+    const fileInput = document.getElementById('csvFile');
+    formData.append('file', fileInput.files[0]);
+
+    // UI更新
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadSpinner = document.getElementById('uploadSpinner');
+    uploadBtn.disabled = true;
+    uploadSpinner.classList.remove('d-none');
+
+    const resultArea = document.getElementById('resultArea');
+    resultArea.classList.add('d-none');
+
+    try {
+        const response = await fetch('/upload/process', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            showSuccess(data);
+        } else {
+            showError(data);
+        }
+    } catch (error) {
+        showError({ error: '通信エラーが発生しました: ' + error.message });
+    } finally {
+        uploadBtn.disabled = false;
+        uploadSpinner.classList.add('d-none');
+    }
+});
+
+function showSuccess(data) {
+    const resultArea = document.getElementById('resultArea');
+    const resultMessage = document.getElementById('resultMessage');
+    const resultList = document.getElementById('resultList');
+    const errorDetails = document.getElementById('errorDetails');
+
+    resultMessage.className = 'alert alert-success';
+    resultMessage.textContent = data.message;
+
+    resultList.innerHTML = `
+        <li>総件数: ${data.result.total}</li>
+        <li>成功: ${data.result.success}</li>
+        <li>失敗: ${data.result.failed}</li>
+        <li>解析エラー: ${data.result.parse_errors || 0}</li>
+        <li>保存エラー: ${data.result.save_errors || 0}</li>
+    `;
+
+    // エラーがある場合は表形式で表示
+    if (data.result.all_errors && data.result.all_errors.length > 0) {
+        displayErrorTable(data.result.all_errors);
+        errorDetails.classList.remove('d-none');
+    } else {
+        errorDetails.classList.add('d-none');
+    }
+
+    resultArea.classList.remove('d-none');
+}
+
+function showError(data) {
+    const resultArea = document.getElementById('resultArea');
+    const resultMessage = document.getElementById('resultMessage');
+    const errorDetails = document.getElementById('errorDetails');
+    const resultList = document.getElementById('resultList');
+
+    resultMessage.className = 'alert alert-danger';
+    resultMessage.textContent = data.error || 'エラーが発生しました';
+
+    // エラー統計を表示
+    if (data.result) {
+        resultList.innerHTML = `
+            <li>総件数: ${data.result.total || 0}</li>
+            <li>成功: ${data.result.success || 0}</li>
+            <li>失敗: ${data.result.failed || 0}</li>
+        `;
+    }
+
+    // エラー詳細を表形式で表示
+    if (data.result && data.result.all_errors && data.result.all_errors.length > 0) {
+        displayErrorTable(data.result.all_errors);
+        errorDetails.classList.remove('d-none');
+    } else if (data.parse_errors) {
+        // 旧形式のparse_errorsもサポート
+        displayErrorTable(data.parse_errors);
+        errorDetails.classList.remove('d-none');
+    }
+
+    resultArea.classList.remove('d-none');
+}
+
+// エラーを表形式で表示する関数
+function displayErrorTable(errors) {
+    const tableBody = document.getElementById('errorTableBody');
+
+    tableBody.innerHTML = errors.map(err => {
+        const rowNum = err.row || '-';
+        const errorType = err.type === 'parse_error' ? '解析エラー' : '保存エラー';
+        const errorTypeClass = err.type === 'parse_error' ? 'text-danger' : 'text-warning';
+        const errorMsg = err.error || '不明なエラー';
+
+        // データ内容を整形
+        let dataContent = '';
+        if (err.data && typeof err.data === 'object') {
+            const dataEntries = Object.entries(err.data)
+                .filter(([key, value]) => value !== null && value !== undefined && value !== '')
+                .map(([key, value]) => `<strong>${key}:</strong> ${value}`);
+            dataContent = dataEntries.length > 0 ? dataEntries.join(', ') : '-';
+        } else {
+            dataContent = '-';
+        }
+
+        return `
+            <tr>
+                <td class="text-center">${rowNum}</td>
+                <td class="${errorTypeClass}">${errorType}</td>
+                <td>${errorMsg}</td>
+                <td><small>${dataContent}</small></td>
+            </tr>
+        `;
+    }).join('');
+}
+</script>
+{% endblock %}

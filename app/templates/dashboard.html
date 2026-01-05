@@ -1,0 +1,512 @@
+{% extends "base.html" %}
+
+{% block title %}ダッシュボード - Stock P&L Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    .summary-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .summary-card h3 {
+        font-size: 0.9rem;
+        color: #6c757d;
+        margin-bottom: 10px;
+        font-weight: 500;
+    }
+    .summary-card .value {
+        font-size: 1.8rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    .summary-card .change {
+        font-size: 0.9rem;
+    }
+    .positive {
+        color: #28a745;
+    }
+    .negative {
+        color: #dc3545;
+    }
+    .chart-container {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .chart-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #333;
+    }
+    .period-selector {
+        margin-bottom: 15px;
+    }
+    .period-selector .btn {
+        margin-right: 5px;
+    }
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #6c757d;
+    }
+    .table-container {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 20px;
+        margin-top: 20px;
+    }
+    #holdings-tfoot tr {
+        border-top: 2px solid #dee2e6;
+        font-weight: bold;
+    }
+    #holdings-tfoot td {
+        padding: 12px 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>ダッシュボード</h1>
+        <button class="btn btn-primary" onclick="refreshAllData()">
+            <i class="bi bi-arrow-clockwise"></i> データを更新
+        </button>
+    </div>
+
+    <!-- サマリーカード -->
+    <div class="row" id="summary-cards">
+        <div class="col-md-3 col-sm-6">
+            <div class="summary-card">
+                <h3>総資産額</h3>
+                <div class="value" id="total-asset">-</div>
+                <div class="change text-muted">現在の評価額</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="summary-card">
+                <h3>総投資額</h3>
+                <div class="value" id="total-investment">-</div>
+                <div class="change text-muted">取得コスト</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="summary-card">
+                <h3>総合損益</h3>
+                <div class="value" id="total-pnl">-</div>
+                <div class="change" id="total-pnl-pct">-</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="summary-card">
+                <h3>保有銘柄数</h3>
+                <div class="value" id="holdings-count">-</div>
+                <div class="change text-muted">銘柄</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 損益推移グラフ -->
+    <div class="chart-container">
+        <div class="chart-title">損益推移</div>
+        <div class="period-selector">
+            <button class="btn btn-sm btn-outline-primary active" data-period="30d" onclick="changePeriod('30d', this)">過去30日</button>
+            <button class="btn btn-sm btn-outline-primary" data-period="1y" onclick="changePeriod('1y', this)">過去1年</button>
+            <button class="btn btn-sm btn-outline-primary" data-period="all" onclick="changePeriod('all', this)">全期間</button>
+        </div>
+        <div id="pnl-chart" style="height: 400px;">
+            <div class="loading">データを読み込み中...</div>
+        </div>
+    </div>
+
+    <!-- グラフ行 -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="chart-container">
+                <div class="chart-title">ポートフォリオ構成</div>
+                <div id="portfolio-chart" style="height: 400px;">
+                    <div class="loading">データを読み込み中...</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container">
+                <div class="chart-title">保有銘柄別損益</div>
+                <div id="holdings-chart" style="height: 400px;">
+                    <div class="loading">データを読み込み中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 保有銘柄テーブル -->
+    <div class="table-container">
+        <div class="chart-title">保有銘柄一覧</div>
+        <div class="table-responsive">
+            <table class="table table-hover" id="holdings-table">
+                <thead>
+                    <tr>
+                        <th>ティッカー</th>
+                        <th>銘柄名</th>
+                        <th class="text-end">保有数量</th>
+                        <th class="text-end">平均取得単価</th>
+                        <th class="text-end">取得コスト</th>
+                        <th class="text-end">現在株価</th>
+                        <th class="text-end">評価額</th>
+                        <th class="text-end">未実現損益</th>
+                        <th class="text-end">損益率</th>
+                        <th class="text-center">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="holdings-tbody">
+                    <tr>
+                        <td colspan="10" class="text-center">
+                            <div class="loading">データを読み込み中...</div>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot id="holdings-tfoot" class="table-light d-none">
+                    <tr>
+                        <td colspan="4" class="text-end"><strong>合計</strong></td>
+                        <td class="text-end" id="total-cost"><strong>-</strong></td>
+                        <td colspan="5"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+<script>
+    let currentPeriod = '30d';
+
+    // ページ読み込み時にデータ取得
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDashboardData();
+    });
+
+    // 全データの読み込み
+    async function loadDashboardData() {
+        await Promise.all([
+            loadSummary(),
+            loadPnlHistory(currentPeriod),
+            loadPortfolioComposition(),
+            loadHoldingsTable()
+        ]);
+    }
+
+    // サマリーデータの読み込み
+    async function loadSummary() {
+        try {
+            const response = await fetch('/api/dashboard/summary');
+            const result = await response.json();
+
+            if (result.success) {
+                const summary = result.summary;
+
+                document.getElementById('total-asset').textContent = formatCurrency(summary.total_asset_value);
+                document.getElementById('total-investment').textContent = formatCurrency(summary.total_investment);
+                document.getElementById('total-pnl').textContent = formatCurrency(summary.total_pnl);
+                document.getElementById('total-pnl').className = 'value ' + (summary.total_pnl >= 0 ? 'positive' : 'negative');
+
+                const pnlPctElement = document.getElementById('total-pnl-pct');
+                pnlPctElement.textContent = formatPercentage(summary.total_pnl_pct);
+                pnlPctElement.className = 'change ' + (summary.total_pnl >= 0 ? 'positive' : 'negative');
+
+                document.getElementById('holdings-count').textContent = summary.holdings_count;
+            }
+        } catch (error) {
+            console.error('サマリーデータの読み込みエラー:', error);
+        }
+    }
+
+    // 損益推移グラフの読み込み
+    async function loadPnlHistory(period) {
+        try {
+            const response = await fetch(`/api/dashboard/pnl-history?period=${period}`);
+            const result = await response.json();
+
+            if (result.success) {
+                const data = result.data;
+
+                const trace = {
+                    x: data.map(d => d.date),
+                    y: data.map(d => d.pnl),
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: '損益',
+                    line: {
+                        color: '#0d6efd',
+                        width: 2
+                    },
+                    marker: {
+                        size: 4
+                    }
+                };
+
+                const layout = {
+                    margin: { t: 10, r: 30, b: 40, l: 80 },
+                    xaxis: {
+                        title: '日付',
+                        type: 'date'
+                    },
+                    yaxis: {
+                        title: '損益 (円)',
+                        tickformat: ',.0f'
+                    },
+                    hovermode: 'closest',
+                    showlegend: false
+                };
+
+                const config = {
+                    responsive: true,
+                    displayModeBar: false
+                };
+
+                Plotly.newPlot('pnl-chart', [trace], layout, config);
+            }
+        } catch (error) {
+            console.error('損益推移データの読み込みエラー:', error);
+            document.getElementById('pnl-chart').innerHTML = '<div class="loading text-danger">データの読み込みに失敗しました</div>';
+        }
+    }
+
+    // ポートフォリオ構成円グラフの読み込み
+    async function loadPortfolioComposition() {
+        try {
+            const response = await fetch('/api/dashboard/portfolio-composition');
+            const result = await response.json();
+
+            if (result.success && result.data.length > 0) {
+                const data = result.data;
+
+                const trace = {
+                    labels: data.map(d => d.name),
+                    values: data.map(d => d.value),
+                    type: 'pie',
+                    textinfo: 'label+percent',
+                    textposition: 'auto',
+                    hoverinfo: 'label+value+percent',
+                    marker: {
+                        line: {
+                            color: 'white',
+                            width: 2
+                        }
+                    }
+                };
+
+                const layout = {
+                    margin: { t: 10, r: 10, b: 10, l: 10 },
+                    showlegend: true,
+                    legend: {
+                        orientation: 'v',
+                        x: 1,
+                        y: 0.5
+                    }
+                };
+
+                const config = {
+                    responsive: true,
+                    displayModeBar: false
+                };
+
+                Plotly.newPlot('portfolio-chart', [trace], layout, config);
+            } else {
+                document.getElementById('portfolio-chart').innerHTML = '<div class="loading">保有銘柄がありません</div>';
+            }
+        } catch (error) {
+            console.error('ポートフォリオ構成データの読み込みエラー:', error);
+            document.getElementById('portfolio-chart').innerHTML = '<div class="loading text-danger">データの読み込みに失敗しました</div>';
+        }
+    }
+
+    // 保有銘柄テーブルの読み込み
+    async function loadHoldingsTable() {
+        try {
+            const response = await fetch('/api/holdings');
+            const result = await response.json();
+
+            if (result.success) {
+                const holdings = result.holdings;
+                const tbody = document.getElementById('holdings-tbody');
+
+                if (holdings.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="10" class="text-center">保有銘柄がありません</td></tr>';
+
+                    // Hide footer if no holdings
+                    document.getElementById('holdings-tfoot').classList.add('d-none');
+
+                    // Create holdings bar chart for P&L
+                    document.getElementById('holdings-chart').innerHTML = '<div class="loading">保有銘柄がありません</div>';
+                    return;
+                }
+
+                tbody.innerHTML = holdings.map(h => `
+                    <tr>
+                        <td><strong>${h.ticker_symbol}</strong></td>
+                        <td>${h.security_name || '-'}</td>
+                        <td class="text-end">${formatNumber(h.total_quantity)}</td>
+                        <td class="text-end">${formatCurrency(h.average_cost)} ${h.currency}</td>
+                        <td class="text-end">${h.total_cost ? formatCurrency(h.total_cost) : '-'}</td>
+                        <td class="text-end">${h.current_price ? formatCurrency(h.current_price) + ' ' + h.currency : '-'}</td>
+                        <td class="text-end">${h.current_value ? formatCurrency(h.current_value) : '-'}</td>
+                        <td class="text-end ${h.unrealized_pnl >= 0 ? 'positive' : 'negative'}">
+                            ${h.unrealized_pnl !== null ? formatCurrency(h.unrealized_pnl) : '-'}
+                        </td>
+                        <td class="text-end ${h.unrealized_pnl_pct >= 0 ? 'positive' : 'negative'}">
+                            ${h.unrealized_pnl_pct !== null ? formatPercentage(h.unrealized_pnl_pct) : '-'}
+                        </td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-danger" onclick="deleteHolding('${h.ticker_symbol}', '${h.security_name || h.ticker_symbol}')">
+                                削除
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // Calculate and display total cost
+                const totalCost = holdings.reduce((sum, h) => sum + (parseFloat(h.total_cost) || 0), 0);
+                document.getElementById('total-cost').innerHTML = `<strong>${formatCurrency(totalCost)}</strong>`;
+                document.getElementById('holdings-tfoot').classList.remove('d-none');
+
+                // Create holdings bar chart for P&L
+                createHoldingsPnlChart(holdings);
+            }
+        } catch (error) {
+            console.error('保有銘柄データの読み込みエラー:', error);
+            document.getElementById('holdings-tbody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
+        }
+    }
+
+    // 保有銘柄の削除
+    async function deleteHolding(ticker, name) {
+        if (!confirm(`${name} (${ticker}) を削除してもよろしいですか？\n\nこの操作により、以下のデータがすべて削除されます：\n- 保有銘柄情報\n- 関連する取引履歴\n- 配当データ\n- 確定損益データ\n\nこの操作は元に戻せません。`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/holdings/${ticker}`, {
+                method: 'DELETE'
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert(`${name} を削除しました\n\n削除されたデータ：\n- 取引: ${result.deleted.transactions}件\n- 配当: ${result.deleted.dividends}件\n- 確定損益: ${result.deleted.realized_pnl}件`);
+
+                // ダッシュボードを再読み込み
+                await loadDashboardData();
+            } else {
+                alert('削除に失敗しました：\n' + result.error);
+            }
+        } catch (error) {
+            console.error('削除エラー:', error);
+            alert('削除に失敗しました');
+        }
+    }
+
+    // 保有銘柄別損益バーチャート
+    function createHoldingsPnlChart(holdings) {
+        const validHoldings = holdings.filter(h => h.unrealized_pnl !== null);
+
+        if (validHoldings.length === 0) {
+            document.getElementById('holdings-chart').innerHTML = '<div class="loading">損益データがありません</div>';
+            return;
+        }
+
+        // Sort by unrealized P&L
+        validHoldings.sort((a, b) => b.unrealized_pnl - a.unrealized_pnl);
+
+        const trace = {
+            x: validHoldings.map(h => h.ticker_symbol),
+            y: validHoldings.map(h => h.unrealized_pnl),
+            type: 'bar',
+            marker: {
+                color: validHoldings.map(h => h.unrealized_pnl >= 0 ? '#28a745' : '#dc3545')
+            },
+            text: validHoldings.map(h => formatCurrency(h.unrealized_pnl)),
+            textposition: 'auto',
+            hoverinfo: 'x+y'
+        };
+
+        const layout = {
+            margin: { t: 10, r: 30, b: 60, l: 80 },
+            xaxis: {
+                title: '銘柄',
+                tickangle: -45
+            },
+            yaxis: {
+                title: '未実現損益 (円)',
+                tickformat: ',.0f'
+            },
+            showlegend: false
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: false
+        };
+
+        Plotly.newPlot('holdings-chart', [trace], layout, config);
+    }
+
+    // 期間変更
+    function changePeriod(period, button) {
+        currentPeriod = period;
+
+        // ボタンのアクティブ状態を更新
+        document.querySelectorAll('.period-selector .btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        button.classList.add('active');
+
+        // グラフを再読み込み
+        loadPnlHistory(period);
+    }
+
+    // 全データを更新
+    async function refreshAllData() {
+        // まず株価を更新
+        try {
+            const response = await fetch('/api/stock-price/update-all', { method: 'POST' });
+            const result = await response.json();
+
+            if (result.success) {
+                // 更新後にダッシュボードデータを再読み込み
+                await loadDashboardData();
+                alert('データを更新しました');
+            }
+        } catch (error) {
+            console.error('データ更新エラー:', error);
+            alert('データの更新に失敗しました');
+        }
+    }
+
+    // フォーマット関数
+    function formatCurrency(value) {
+        if (value === null || value === undefined) return '-';
+        return '¥' + Number(value).toLocaleString('ja-JP', { maximumFractionDigits: 0 });
+    }
+
+    function formatNumber(value) {
+        if (value === null || value === undefined) return '-';
+        return Number(value).toLocaleString('ja-JP', { maximumFractionDigits: 4 });
+    }
+
+    function formatPercentage(value) {
+        if (value === null || value === undefined) return '-';
+        const sign = value >= 0 ? '+' : '';
+        return sign + Number(value).toFixed(2) + '%';
+    }
+</script>
+{% endblock %}

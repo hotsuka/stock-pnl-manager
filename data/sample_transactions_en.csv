@@ -1,0 +1,6 @@
+transaction_date,ticker_symbol,security_name,transaction_type,quantity,unit_price,commission,settlement_amount,currency
+2024/01/15,AAPL,Apple Inc.,BUY,100,150.00,5.00,15005.00,USD
+2024/01/20,7203,Toyota Motor Corporation,BUY,100,2500,100,250100,JPY
+2024/02/01,AAPL,Apple Inc.,BUY,50,155.00,3.00,7753.00,USD
+2024/02/15,MSFT,Microsoft Corporation,BUY,50,380.00,4.00,19004.00,USD
+2024/03/01,AAPL,Apple Inc.,SELL,50,165.00,3.00,8247.00,USD

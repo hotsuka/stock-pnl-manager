@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+
+{% block title %}取引履歴 - Stock P&L Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-section {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .table-container {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 20px;
+    }
+    .action-bar {
+        margin-bottom: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .transaction-type-buy {
+        color: #0d6efd;
+        font-weight: 500;
+    }
+    .transaction-type-sell {
+        color: #dc3545;
+        font-weight: 500;
+    }
+    .selected-count {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+        padding-right: 20px;
+    }
+    .sortable:hover {
+        background-color: #f8f9fa;
+    }
+    .sortable::after {
+        content: '⇅';
+        position: absolute;
+        right: 5px;
+        opacity: 0.3;
+    }
+    .sortable.sort-asc::after {
+        content: '▲';
+        opacity: 1;
+        color: #0d6efd;
+    }
+    .sortable.sort-desc::after {
+        content: '▼';
+        opacity: 1;
+        color: #0d6efd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="transactions-page">
+    <h1>取引履歴</h1>
+
+    <!-- 統計情報 -->
+    <div class="alert alert-info mb-3">
+        <div class="row">
+            <div class="col-md-6">
+                <strong>総登録件数:</strong> <span id="totalCount">-</span>件
+            </div>
+            <div class="col-md-6 text-end">
+                <strong>表示件数:</strong> <span id="displayCount">-</span>件
+            </div>
+        </div>
+    </div>
+
+    <!-- フィルター -->
+    <div class="filter-section">
+        <h5 class="mb-3">絞り込み検索</h5>
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <label for="searchTicker" class="form-label">ティッカー検索</label>
+                <input type="text" class="form-control" id="searchTicker"
+                       placeholder="例: AAPL" oninput="applyFilters()">
+                <small class="text-muted">部分一致で検索</small>
+            </div>
+            <div class="col-md-4">
+                <label for="searchName" class="form-label">銘柄名検索</label>
+                <input type="text" class="form-control" id="searchName"
+                       placeholder="例: Apple" oninput="applyFilters()">
+                <small class="text-muted">部分一致で検索</small>
+            </div>
+            <div class="col-md-4">
+                <label for="filterType" class="form-label">取引種別</label>
+                <select class="form-select" id="filterType" onchange="applyFilters()">
+                    <option value="">すべて</option>
+                    <option value="BUY">買付</option>
+                    <option value="SELL">売却</option>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-4">
+                <label for="filterTicker" class="form-label">銘柄で絞り込み</label>
+                <select class="form-select" id="filterTicker" onchange="applyFilters()">
+                    <option value="">すべて</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="filterLimit" class="form-label">表示件数</label>
+                <select class="form-select" id="filterLimit" onchange="loadTransactions()">
+                    <option value="">すべて</option>
+                    <option value="50" selected>50件</option>
+                    <option value="100">100件</option>
+                    <option value="200">200件</option>
+                </select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button class="btn btn-secondary w-100" onclick="clearFilters()">
+                    フィルターをクリア
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- アクションバー -->
+    <div class="action-bar">
+        <div>
+            <span class="selected-count" id="selectedCount">0件選択中</span>
+        </div>
+        <div>
+            <button class="btn btn-danger" id="deleteSelectedBtn" onclick="deleteSelected()" disabled>
+                選択した取引を削除
+            </button>
+        </div>
+    </div>
+
+    <!-- 取引一覧テーブル -->
+    <div class="table-container">
+        <div class="table-responsive">
+            <table class="table table-hover" id="transactions-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">
+                            <input type="checkbox" class="form-check-input" id="selectAll" onchange="toggleSelectAll()">
+                        </th>
+                        <th class="sortable" onclick="sortTable('transaction_date')">約定日</th>
+                        <th class="sortable" onclick="sortTable('ticker_symbol')">ティッカー</th>
+                        <th class="sortable" onclick="sortTable('security_name')">銘柄名</th>
+                        <th class="sortable" onclick="sortTable('transaction_type')">取引種別</th>
+                        <th class="sortable text-end" onclick="sortTable('quantity')">数量</th>
+                        <th class="sortable text-end" onclick="sortTable('unit_price')">単価</th>
+                        <th class="sortable text-end" onclick="sortTable('commission')">手数料</th>
+                        <th class="sortable text-end" onclick="sortTable('settlement_amount')">受渡金額</th>
+                        <th class="sortable" onclick="sortTable('currency')">通貨</th>
+                    </tr>
+                </thead>
+                <tbody id="transactions-tbody">
+                    <tr>
+                        <td colspan="10" class="text-center">
+                            <div class="loading">データを読み込み中...</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allTransactions = [];
+    let filteredTransactions = [];
+    let displayedTransactions = [];
+    let selectedIds = new Set();
+    let currentSortColumn = 'transaction_date';
+    let currentSortDirection = 'desc';
+
+    // ページ読み込み時
+    document.addEventListener('DOMContentLoaded', function() {
+        loadTransactions();
+        loadTickerFilter();
+        updateSortIndicators();
+    });
+
+    // 取引データの読み込み
+    async function loadTransactions() {
+        const limit = document.getElementById('filterLimit').value;
+
+        let url = '/api/transactions?';
+        if (limit) url += `limit=${limit}`;
+
+        try {
+            const response = await fetch(url);
+            const result = await response.json();
+
+            if (result.success) {
+                allTransactions = result.transactions;
+
+                // 総件数を表示（limitに関係なく全件数）
+                document.getElementById('totalCount').textContent = result.total_count || allTransactions.length;
+
+                // フィルター適用
+                applyFilters();
+            }
+        } catch (error) {
+            console.error('取引データの読み込みエラー:', error);
+            document.getElementById('transactions-tbody').innerHTML =
+                '<tr><td colspan="10" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
+        }
+    }
+
+    // フィルターを適用
+    function applyFilters() {
+        const searchTicker = document.getElementById('searchTicker').value.toLowerCase().trim();
+        const searchName = document.getElementById('searchName').value.toLowerCase().trim();
+        const filterTicker = document.getElementById('filterTicker').value;
+        const filterType = document.getElementById('filterType').value;
+
+        filteredTransactions = allTransactions.filter(t => {
+            // ティッカー検索（部分一致）
+            if (searchTicker && !t.ticker_symbol.toLowerCase().includes(searchTicker)) {
+                return false;
+            }
+
+            // 銘柄名検索（部分一致）
+            if (searchName && t.security_name && !t.security_name.toLowerCase().includes(searchName)) {
+                return false;
+            }
+
+            // ティッカープルダウン（完全一致）
+            if (filterTicker && t.ticker_symbol !== filterTicker) {
+                return false;
+            }
+
+            // 取引種別
+            if (filterType && t.transaction_type !== filterType) {
+                return false;
+            }
+
+            return true;
+        });
+
+        // 表示件数を更新
+        document.getElementById('displayCount').textContent = filteredTransactions.length;
+
+        // ソート適用
+        displayedTransactions = sortTransactions(filteredTransactions, currentSortColumn, currentSortDirection);
+        displayTransactions(displayedTransactions);
+    }
+
+    // フィルターをクリア
+    function clearFilters() {
+        document.getElementById('searchTicker').value = '';
+        document.getElementById('searchName').value = '';
+        document.getElementById('filterTicker').value = '';
+        document.getElementById('filterType').value = '';
+        applyFilters();
+    }
+
+    // 取引データの表示
+    function displayTransactions(transactions) {
+        const tbody = document.getElementById('transactions-tbody');
+
+        if (transactions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center">取引履歴がありません</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = transactions.map(t => `
+            <tr>
+                <td>
+                    <input type="checkbox" class="form-check-input transaction-checkbox"
+                           value="${t.id}" onchange="updateSelectedCount()">
+                </td>
+                <td>${formatDate(t.transaction_date)}</td>
+                <td><strong>${t.ticker_symbol}</strong></td>
+                <td>${t.security_name || '-'}</td>
+                <td class="transaction-type-${t.transaction_type.toLowerCase()}">
+                    ${t.transaction_type === 'BUY' ? '買付' : '売却'}
+                </td>
+                <td class="text-end">${formatNumber(t.quantity)}</td>
+                <td class="text-end">${formatCurrency(t.unit_price)}</td>
+                <td class="text-end">${formatCurrency(t.commission)}</td>
+                <td class="text-end">${t.settlement_amount ? formatCurrency(t.settlement_amount) : '-'}</td>
+                <td>${t.currency}</td>
+            </tr>
+        `).join('');
+    }
+
+    // 銘柄フィルターの読み込み
+    async function loadTickerFilter() {
+        try {
+            const response = await fetch('/api/holdings');
+            const result = await response.json();
+
+            if (result.success) {
+                const select = document.getElementById('filterTicker');
+                const options = result.holdings.map(h =>
+                    `<option value="${h.ticker_symbol}">${h.ticker_symbol} - ${h.security_name || ''}</option>`
+                ).join('');
+                select.innerHTML = '<option value="">すべて</option>' + options;
+            }
+        } catch (error) {
+            console.error('銘柄フィルターの読み込みエラー:', error);
+        }
+    }
+
+    // 全選択/全解除
+    function toggleSelectAll() {
+        const selectAll = document.getElementById('selectAll');
+        const checkboxes = document.querySelectorAll('.transaction-checkbox');
+
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = selectAll.checked;
+        });
+
+        updateSelectedCount();
+    }
+
+    // 選択数の更新
+    function updateSelectedCount() {
+        const checkboxes = document.querySelectorAll('.transaction-checkbox:checked');
+        const count = checkboxes.length;
+
+        document.getElementById('selectedCount').textContent = `${count}件選択中`;
+        document.getElementById('deleteSelectedBtn').disabled = count === 0;
+
+        // 全選択チェックボックスの状態を更新
+        const allCheckboxes = document.querySelectorAll('.transaction-checkbox');
+        const selectAll = document.getElementById('selectAll');
+        selectAll.checked = allCheckboxes.length > 0 && count === allCheckboxes.length;
+    }
+
+    // 選択した取引を削除
+    async function deleteSelected() {
+        const checkboxes = document.querySelectorAll('.transaction-checkbox:checked');
+        const ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+        if (ids.length === 0) {
+            alert('削除する取引を選択してください');
+            return;
+        }
+
+        if (!confirm(`選択した${ids.length}件の取引を削除してもよろしいですか？\n\nこの操作により、関連する保有銘柄の平均取得単価が再計算されます。\nこの操作は元に戻せません。`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/transactions/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    transaction_ids: ids
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert(`${result.deleted_count}件の取引を削除しました\n\n影響を受けた銘柄: ${result.affected_tickers.join(', ')}`);
+
+                // データを再読み込み
+                await loadTransactions();
+                updateSelectedCount();
+            } else {
+                alert('削除に失敗しました：\n' + result.error);
+            }
+        } catch (error) {
+            console.error('削除エラー:', error);
+            alert('削除に失敗しました');
+        }
+    }
+
+    // テーブルのソート
+    function sortTable(column) {
+        // 同じ列をクリックした場合は昇順/降順を切り替え
+        if (currentSortColumn === column) {
+            currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSortColumn = column;
+            currentSortDirection = 'asc';
+        }
+
+        // ソート実行
+        displayedTransactions = sortTransactions(displayedTransactions, currentSortColumn, currentSortDirection);
+        displayTransactions(displayedTransactions);
+        updateSortIndicators();
+    }
+
+    // ソート処理
+    function sortTransactions(transactions, column, direction) {
+        const sorted = [...transactions].sort((a, b) => {
+            let aVal = a[column];
+            let bVal = b[column];
+
+            // null/undefined の処理
+            if (aVal === null || aVal === undefined) aVal = '';
+            if (bVal === null || bVal === undefined) bVal = '';
+
+            // 日付の場合
+            if (column === 'transaction_date') {
+                aVal = new Date(aVal);
+                bVal = new Date(bVal);
+            }
+            // 数値の場合
+            else if (['quantity', 'unit_price', 'commission', 'settlement_amount'].includes(column)) {
+                aVal = parseFloat(aVal) || 0;
+                bVal = parseFloat(bVal) || 0;
+            }
+            // 文字列の場合
+            else {
+                aVal = String(aVal).toLowerCase();
+                bVal = String(bVal).toLowerCase();
+            }
+
+            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        return sorted;
+    }
+
+    // ソートインジケーターの更新
+    function updateSortIndicators() {
+        // 全てのソートインジケーターをリセット
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+        });
+
+        // 現在のソート列にインジケーターを追加
+        const columnMapping = {
+            'transaction_date': 0,
+            'ticker_symbol': 1,
+            'security_name': 2,
+            'transaction_type': 3,
+            'quantity': 4,
+            'unit_price': 5,
+            'commission': 6,
+            'settlement_amount': 7,
+            'currency': 8
+        };
+
+        const index = columnMapping[currentSortColumn];
+        if (index !== undefined) {
+            const sortableHeaders = document.querySelectorAll('.sortable');
+            if (sortableHeaders[index]) {
+                sortableHeaders[index].classList.add(`sort-${currentSortDirection}`);
+            }
+        }
+    }
+
+    // フォーマット関数
+    function formatDate(dateStr) {
+        if (!dateStr) return '-';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('ja-JP');
+    }
+
+    function formatCurrency(value) {
+        if (value === null || value === undefined) return '-';
+        return '¥' + Number(value).toLocaleString('ja-JP', { maximumFractionDigits: 2 });
+    }
+
+    function formatNumber(value) {
+        if (value === null || value === undefined) return '-';
+        return Number(value).toLocaleString('ja-JP', { maximumFractionDigits: 4 });
+    }
+</script>
+{% endblock %}

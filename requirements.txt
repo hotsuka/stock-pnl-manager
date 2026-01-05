@@ -1,0 +1,29 @@
+# Web Framework
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.5
+Flask-WTF==1.2.1
+
+# Data Processing (using latest versions with pre-built binaries)
+pandas>=2.2.0
+numpy>=1.26.0
+
+# Financial Data
+yfinance>=0.2.33
+
+# HTTP Requests & Web Scraping
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml>=6.0.1
+
+# Visualization
+plotly==5.18.0
+
+# Utilities
+chardet==5.2.0
+forex-python==1.8
+python-dotenv==1.0.0
+
+# Development & Testing
+pytest>=7.4.3
+pytest-cov>=4.1.0
