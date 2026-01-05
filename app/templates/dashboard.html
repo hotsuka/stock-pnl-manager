@@ -649,7 +649,7 @@
         validHoldings.sort((a, b) => b.calculatedPnL - a.calculatedPnL);
 
         const trace = {
-            x: validHoldings.map(h => h.ticker_symbol),
+            x: validHoldings.map(h => h.security_name || h.ticker_symbol),
             y: validHoldings.map(h => h.calculatedPnL),
             type: 'bar',
             marker: {
