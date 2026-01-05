@@ -661,14 +661,19 @@
         };
 
         const layout = {
-            margin: { t: 10, r: 30, b: 60, l: 80 },
+            margin: { t: 10, r: 30, b: 120, l: 80 },
             xaxis: {
                 title: '銘柄',
-                tickangle: -45
+                tickangle: -45,
+                automargin: true,
+                tickfont: {
+                    size: 10
+                }
             },
             yaxis: {
                 title: '未実現損益 (円)',
-                tickformat: ',.0f'
+                tickformat: ',.0f',
+                automargin: true
             },
             showlegend: false
         };
