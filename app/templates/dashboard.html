@@ -172,6 +172,13 @@
     <!-- 保有銘柄テーブル -->
     <div class="table-container">
         <div class="chart-title">保有銘柄一覧</div>
+
+        <!-- 為替レート表示 -->
+        <div class="alert alert-info mb-3" id="exchange-rates-display" style="display: none;">
+            <strong>換算為替レート:</strong>
+            <span id="exchange-rates-text">読み込み中...</span>
+        </div>
+
         <div class="table-responsive">
             <table class="table table-hover" id="holdings-table">
                 <thead>
@@ -215,6 +222,7 @@
     let holdingsData = [];
     let currentSortField = null;
     let currentSortDirection = 'asc';
+    let exchangeRates = {};  // Store exchange rates
 
     // ページ読み込み時にデータ取得
     document.addEventListener('DOMContentLoaded', function() {
@@ -223,12 +231,50 @@
 
     // 全データの読み込み
     async function loadDashboardData() {
+        // First load exchange rates
+        await loadExchangeRates();
+
+        // Then load other data
         await Promise.all([
             loadSummary(),
             loadPnlHistory(currentPeriod),
             loadPortfolioComposition(),
             loadHoldingsTable()
         ]);
+    }
+
+    // 為替レートの読み込み
+    async function loadExchangeRates() {
+        try {
+            const response = await fetch('/api/exchange-rate/multiple?currencies=USD,KRW');
+            const result = await response.json();
+
+            if (result.success) {
+                exchangeRates = result.rates;
+                displayExchangeRates();
+            }
+        } catch (error) {
+            console.error('為替レートの読み込みエラー:', error);
+        }
+    }
+
+    // 為替レートの表示
+    function displayExchangeRates() {
+        const display = document.getElementById('exchange-rates-display');
+        const text = document.getElementById('exchange-rates-text');
+
+        const rates = [];
+        if (exchangeRates.USD && exchangeRates.USD.rate) {
+            rates.push(`USD/JPY: ${exchangeRates.USD.rate.toFixed(2)}`);
+        }
+        if (exchangeRates.KRW && exchangeRates.KRW.rate) {
+            rates.push(`KRW/JPY: ${exchangeRates.KRW.rate.toFixed(4)}`);
+        }
+
+        if (rates.length > 0) {
+            text.textContent = rates.join(' | ');
+            display.style.display = 'block';
+        }
     }
 
     // サマリーデータの読み込み
@@ -372,6 +418,43 @@
         }
     }
 
+    // 通貨をJPYに換算
+    function convertToJPY(amount, currency) {
+        if (!amount) return null;
+        if (currency === 'JPY' || currency === '日本円') return amount;
+
+        const rate = exchangeRates[currency]?.rate;
+        if (!rate) return amount;  // レートがない場合は元の金額を返す
+
+        return amount * rate;
+    }
+
+    // 株価を表示用にフォーマット（元の通貨 + JPY換算）
+    function formatPriceWithConversion(price, currency) {
+        if (!price) return '-';
+
+        const priceStr = formatCurrency(price);
+
+        if (currency === 'JPY' || currency === '日本円') {
+            return priceStr;
+        }
+
+        const jpyAmount = convertToJPY(price, currency);
+        if (jpyAmount && jpyAmount !== price) {
+            return `${priceStr} ${currency}<br><small>(${formatCurrency(jpyAmount)} JPY)</small>`;
+        }
+
+        return `${priceStr} ${currency}`;
+    }
+
+    // 評価額を表示用にフォーマット（JPYのみ）
+    function formatValueInJPY(value, currency) {
+        if (!value) return '-';
+
+        const jpyAmount = convertToJPY(value, currency);
+        return formatCurrency(jpyAmount);
+    }
+
     function renderHoldingsTable() {
         const tbody = document.getElementById('holdings-tbody');
 
@@ -389,8 +472,8 @@
                 <td class="text-end">${formatNumber(h.total_quantity)}</td>
                 <td class="text-end">${formatCurrency(h.average_cost)} ${h.currency}</td>
                 <td class="text-end">${h.total_cost ? formatCurrency(h.total_cost) : '-'}</td>
-                <td class="text-end">${h.current_price ? formatCurrency(h.current_price) + ' ' + h.currency : '-'}</td>
-                <td class="text-end">${h.current_value ? formatCurrency(h.current_value) : '-'}</td>
+                <td class="text-end">${formatPriceWithConversion(h.current_price, h.currency)}</td>
+                <td class="text-end">${formatValueInJPY(h.current_value, h.currency)}</td>
                 <td class="text-end ${h.unrealized_pnl >= 0 ? 'positive' : 'negative'}">
                     ${h.unrealized_pnl !== null ? formatCurrency(h.unrealized_pnl) : '-'}
                 </td>

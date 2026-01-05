@@ -41,6 +41,22 @@ def update_all_stock_prices():
     })
 
 
+@bp.route('/exchange-rate/multiple', methods=['GET'])
+def get_multiple_exchange_rates():
+    """Get multiple exchange rates at once"""
+    # Get currencies from query params or use defaults
+    currencies = request.args.get('currencies', 'USD,KRW').split(',')
+    to_currency = request.args.get('to', 'JPY')
+
+    rates = ExchangeRateFetcher.get_multiple_rates(currencies, to_currency)
+
+    return jsonify({
+        'success': True,
+        'rates': rates,
+        'to_currency': to_currency
+    })
+
+
 @bp.route('/exchange-rate/<from_currency>', methods=['GET'])
 def get_exchange_rate(from_currency):
     """Get exchange rate from one currency to another"""
