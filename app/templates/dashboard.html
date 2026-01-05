@@ -239,8 +239,7 @@
         await Promise.all([
             loadSummary(),
             loadPnlHistory(currentPeriod),
-            loadPortfolioComposition(),
-            loadHoldingsTable()
+            loadHoldingsTable()  // This will also create the portfolio treemap
         ]);
     }
 
@@ -355,52 +354,68 @@
     }
 
     // ポートフォリオ構成円グラフの読み込み
-    async function loadPortfolioComposition() {
-        try {
-            const response = await fetch('/api/dashboard/portfolio-composition');
-            const result = await response.json();
-
-            if (result.success && result.data.length > 0) {
-                const data = result.data;
-
-                const trace = {
-                    labels: data.map(d => d.name),
-                    values: data.map(d => d.value),
-                    type: 'pie',
-                    textinfo: 'label+percent',
-                    textposition: 'auto',
-                    hoverinfo: 'label+value+percent',
-                    marker: {
-                        line: {
-                            color: 'white',
-                            width: 2
-                        }
-                    }
-                };
-
-                const layout = {
-                    margin: { t: 10, r: 10, b: 10, l: 10 },
-                    showlegend: true,
-                    legend: {
-                        orientation: 'v',
-                        x: 1,
-                        y: 0.5
-                    }
-                };
-
-                const config = {
-                    responsive: true,
-                    displayModeBar: false
-                };
-
-                Plotly.newPlot('portfolio-chart', [trace], layout, config);
-            } else {
-                document.getElementById('portfolio-chart').innerHTML = '<div class="loading">保有銘柄がありません</div>';
-            }
-        } catch (error) {
-            console.error('ポートフォリオ構成データの読み込みエラー:', error);
-            document.getElementById('portfolio-chart').innerHTML = '<div class="loading text-danger">データの読み込みに失敗しました</div>';
+    function createPortfolioTreemap(holdings) {
+        if (!holdings || holdings.length === 0) {
+            document.getElementById('portfolio-chart').innerHTML = '<div class="loading">保有銘柄がありません</div>';
+            return;
         }
+
+        // Filter holdings with valid data
+        const validHoldings = holdings.filter(h => h.current_value && h.current_value > 0);
+
+        if (validHoldings.length === 0) {
+            document.getElementById('portfolio-chart').innerHTML = '<div class="loading">保有銘柄がありません</div>';
+            return;
+        }
+
+        // Calculate P&L percentage for each holding
+        const holdingsWithPnL = validHoldings.map(h => {
+            const pnlPct = calculateUnrealizedPnLPct(h);
+            return {
+                name: h.security_name || h.ticker_symbol,
+                value: convertToJPY(h.current_value, h.currency) || 0,
+                pnlPct: pnlPct !== null ? pnlPct : 0
+            };
+        });
+
+        const trace = {
+            type: 'treemap',
+            labels: holdingsWithPnL.map(h => h.name),
+            parents: holdingsWithPnL.map(() => ''),
+            values: holdingsWithPnL.map(h => h.value),
+            text: holdingsWithPnL.map(h => `${formatCurrency(h.value)}<br>${formatPercentage(h.pnlPct)}`),
+            textposition: 'middle center',
+            marker: {
+                colors: holdingsWithPnL.map(h => h.pnlPct),
+                colorscale: [
+                    [0, '#dc3545'],      // Red for negative
+                    [0.5, '#ffc107'],    // Yellow for neutral
+                    [1, '#28a745']       // Green for positive
+                ],
+                cmid: 0,
+                colorbar: {
+                    title: '損益率(%)',
+                    ticksuffix: '%'
+                }
+            },
+            hovertemplate: '<b>%{label}</b><br>評価額: %{value:,.0f} 円<br>損益率: %{color:.2f}%<extra></extra>'
+        };
+
+        const layout = {
+            margin: { t: 30, r: 10, b: 10, l: 10 }
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: false
+        };
+
+        Plotly.newPlot('portfolio-chart', [trace], layout, config);
+    }
+
+    async function loadPortfolioComposition() {
+        // This function is now called from loadHoldingsTable
+        // to ensure holdingsData is available
     }
 
     // 保有銘柄テーブルの読み込み
@@ -417,6 +432,7 @@
                     calculated_unrealized_pnl_pct: calculateUnrealizedPnLPct(h)
                 }));
                 renderHoldingsTable();
+                createPortfolioTreemap(holdingsData);
             }
         } catch (error) {
             console.error('保有銘柄データの読み込みエラー:', error);
