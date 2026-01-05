@@ -206,7 +206,7 @@
                         <td colspan="5" class="text-end"><strong>合計</strong></td>
                         <td class="text-end" id="total-cost"><strong>-</strong></td>
                         <td class="text-end" id="total-value"><strong>-</strong></td>
-                        <td class="text-end" id="total-pnl"><strong>-</strong></td>
+                        <td class="text-end" id="holdings-total-pnl"><strong>-</strong></td>
                         <td></td>
                     </tr>
                 </tfoot>
@@ -541,8 +541,8 @@
         document.getElementById('total-value').innerHTML = `<strong>${formatCurrency(totalValue)}</strong>`;
 
         const pnlClass = totalPnL >= 0 ? 'positive' : 'negative';
-        document.getElementById('total-pnl').innerHTML = `<strong class="${pnlClass}">${formatCurrency(totalPnL)}</strong>`;
-        document.getElementById('total-pnl').className = `text-end ${pnlClass}`;
+        document.getElementById('holdings-total-pnl').innerHTML = `<strong class="${pnlClass}">${formatCurrency(totalPnL)}</strong>`;
+        document.getElementById('holdings-total-pnl').className = `text-end ${pnlClass}`;
 
         document.getElementById('holdings-tfoot').classList.remove('d-none');
 
