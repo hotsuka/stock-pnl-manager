@@ -455,6 +455,27 @@
         return formatCurrency(jpyAmount);
     }
 
+    // 未実現損益を計算（評価額(JPY) - 取得コスト）
+    function calculateUnrealizedPnL(holding) {
+        if (!holding.current_value || !holding.total_cost) return null;
+
+        const currentValueJPY = convertToJPY(holding.current_value, holding.currency);
+        const totalCost = parseFloat(holding.total_cost);
+
+        return currentValueJPY - totalCost;
+    }
+
+    // 未実現損益率を計算
+    function calculateUnrealizedPnLPct(holding) {
+        const pnl = calculateUnrealizedPnL(holding);
+        if (pnl === null || !holding.total_cost) return null;
+
+        const totalCost = parseFloat(holding.total_cost);
+        if (totalCost === 0) return null;
+
+        return (pnl / totalCost) * 100;
+    }
+
     function renderHoldingsTable() {
         const tbody = document.getElementById('holdings-tbody');
 
@@ -465,28 +486,34 @@
             return;
         }
 
-        tbody.innerHTML = holdingsData.map(h => `
-            <tr>
-                <td><strong>${h.ticker_symbol}</strong></td>
-                <td>${h.security_name || '-'}</td>
-                <td class="text-end">${formatNumber(h.total_quantity)}</td>
-                <td class="text-end">${formatCurrency(h.average_cost)} ${h.currency}</td>
-                <td class="text-end">${h.total_cost ? formatCurrency(h.total_cost) : '-'}</td>
-                <td class="text-end">${formatPriceWithConversion(h.current_price, h.currency)}</td>
-                <td class="text-end">${formatValueInJPY(h.current_value, h.currency)}</td>
-                <td class="text-end ${h.unrealized_pnl >= 0 ? 'positive' : 'negative'}">
-                    ${h.unrealized_pnl !== null ? formatCurrency(h.unrealized_pnl) : '-'}
-                </td>
-                <td class="text-end ${h.unrealized_pnl_pct >= 0 ? 'positive' : 'negative'}">
-                    ${h.unrealized_pnl_pct !== null ? formatPercentage(h.unrealized_pnl_pct) : '-'}
-                </td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-danger" onclick="deleteHolding('${h.ticker_symbol}', '${h.security_name || h.ticker_symbol}')">
-                        削除
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+        tbody.innerHTML = holdingsData.map(h => {
+            const unrealizedPnL = calculateUnrealizedPnL(h);
+            const unrealizedPnLPct = calculateUnrealizedPnLPct(h);
+            const pnlClass = unrealizedPnL !== null && unrealizedPnL >= 0 ? 'positive' : 'negative';
+
+            return `
+                <tr>
+                    <td><strong>${h.ticker_symbol}</strong></td>
+                    <td>${h.security_name || '-'}</td>
+                    <td class="text-end">${formatNumber(h.total_quantity)}</td>
+                    <td class="text-end">${formatCurrency(h.average_cost)} ${h.currency}</td>
+                    <td class="text-end">${h.total_cost ? formatCurrency(h.total_cost) : '-'}</td>
+                    <td class="text-end">${formatPriceWithConversion(h.current_price, h.currency)}</td>
+                    <td class="text-end">${formatValueInJPY(h.current_value, h.currency)}</td>
+                    <td class="text-end ${pnlClass}">
+                        ${unrealizedPnL !== null ? formatCurrency(unrealizedPnL) : '-'}
+                    </td>
+                    <td class="text-end ${pnlClass}">
+                        ${unrealizedPnLPct !== null ? formatPercentage(unrealizedPnLPct) : '-'}
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-danger" onclick="deleteHolding('${h.ticker_symbol}', '${h.security_name || h.ticker_symbol}')">
+                            削除
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
 
         // Calculate and display total cost
         const totalCost = holdingsData.reduce((sum, h) => sum + (parseFloat(h.total_cost) || 0), 0);
@@ -591,7 +618,13 @@
 
     // 保有銘柄別損益バーチャート
     function createHoldingsPnlChart(holdings) {
-        const validHoldings = holdings.filter(h => h.unrealized_pnl !== null);
+        // Calculate P&L for each holding
+        const holdingsWithPnL = holdings.map(h => ({
+            ...h,
+            calculatedPnL: calculateUnrealizedPnL(h)
+        }));
+
+        const validHoldings = holdingsWithPnL.filter(h => h.calculatedPnL !== null);
 
         if (validHoldings.length === 0) {
             document.getElementById('holdings-chart').innerHTML = '<div class="loading">損益データがありません</div>';
@@ -599,16 +632,16 @@
         }
 
         // Sort by unrealized P&L
-        validHoldings.sort((a, b) => b.unrealized_pnl - a.unrealized_pnl);
+        validHoldings.sort((a, b) => b.calculatedPnL - a.calculatedPnL);
 
         const trace = {
             x: validHoldings.map(h => h.ticker_symbol),
-            y: validHoldings.map(h => h.unrealized_pnl),
+            y: validHoldings.map(h => h.calculatedPnL),
             type: 'bar',
             marker: {
-                color: validHoldings.map(h => h.unrealized_pnl >= 0 ? '#28a745' : '#dc3545')
+                color: validHoldings.map(h => h.calculatedPnL >= 0 ? '#28a745' : '#dc3545')
             },
-            text: validHoldings.map(h => formatCurrency(h.unrealized_pnl)),
+            text: validHoldings.map(h => formatCurrency(h.calculatedPnL)),
             textposition: 'auto',
             hoverinfo: 'x+y'
         };
