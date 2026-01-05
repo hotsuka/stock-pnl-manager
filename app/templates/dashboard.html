@@ -479,7 +479,7 @@
     function formatPriceWithPreviousClose(currentPrice, previousClose, currency) {
         if (!currentPrice) return '-';
 
-        const priceStr = formatCurrency(currentPrice);
+        const priceStr = formatPrice(currentPrice, currency);
         let result = priceStr;
 
         // Add currency for foreign stocks
@@ -495,7 +495,7 @@
 
         // Add previous close
         if (previousClose !== null && previousClose !== undefined) {
-            result += `<br><small style="color: #6c757d;">(前日: ${formatCurrency(previousClose)})</small>`;
+            result += `<br><small style="color: #6c757d;">(前日: ${formatPrice(previousClose, currency)})</small>`;
         }
 
         return result;
@@ -556,7 +556,7 @@
                     <td><strong>${h.ticker_symbol}</strong></td>
                     <td>${h.security_name || '-'}</td>
                     <td class="text-end">${formatNumber(h.total_quantity)}</td>
-                    <td class="text-end">${formatCurrency(h.average_cost)} ${h.currency}</td>
+                    <td class="text-end">${formatPrice(h.average_cost, h.currency)} ${h.currency}</td>
                     <td class="text-end">${formatPriceWithPreviousClose(h.current_price, h.previous_close, h.currency)}</td>
                     <td class="text-end">${h.total_cost ? formatCurrency(h.total_cost) : '-'}</td>
                     <td class="text-end">${formatValueInJPY(h.current_value, h.currency)}</td>
@@ -770,6 +770,26 @@
     function formatCurrency(value) {
         if (value === null || value === undefined) return '-';
         return Number(value).toLocaleString('ja-JP', { maximumFractionDigits: 0 });
+    }
+
+    function formatPrice(value, currency) {
+        if (value === null || value === undefined) return '-';
+
+        // Determine decimal places based on currency
+        let decimals = 0;
+        if (currency === 'USD') {
+            decimals = 2;
+        } else if (currency === 'JPY' || currency === '日本円' || currency === 'KRW') {
+            decimals = 0;
+        } else {
+            // Default for other currencies
+            decimals = 2;
+        }
+
+        return Number(value).toLocaleString('ja-JP', {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals
+        });
     }
 
     function formatNumber(value) {
