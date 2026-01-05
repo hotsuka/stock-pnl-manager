@@ -190,8 +190,8 @@
                         <th class="text-end">現在株価</th>
                         <th class="sortable text-end" onclick="sortTable('total_cost')">取得コスト</th>
                         <th class="sortable text-end" onclick="sortTable('current_value')">評価額</th>
-                        <th class="text-end">未実現損益</th>
-                        <th class="text-end">損益率</th>
+                        <th class="sortable text-end" onclick="sortTable('unrealized_pnl')">未実現損益</th>
+                        <th class="sortable text-end" onclick="sortTable('unrealized_pnl_pct')">損益率</th>
                     </tr>
                 </thead>
                 <tbody id="holdings-tbody">
@@ -410,12 +410,17 @@
             const result = await response.json();
 
             if (result.success) {
-                holdingsData = result.holdings;
+                // Add calculated P&L values to each holding for sorting
+                holdingsData = result.holdings.map(h => ({
+                    ...h,
+                    calculated_unrealized_pnl: calculateUnrealizedPnL(h),
+                    calculated_unrealized_pnl_pct: calculateUnrealizedPnLPct(h)
+                }));
                 renderHoldingsTable();
             }
         } catch (error) {
             console.error('保有銘柄データの読み込みエラー:', error);
-            document.getElementById('holdings-tbody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
+            document.getElementById('holdings-tbody').innerHTML = '<tr><td colspan="9" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
         }
     }
 
@@ -547,8 +552,16 @@
 
         // データを並べ替え
         holdingsData.sort((a, b) => {
-            let aValue = a[field];
-            let bValue = b[field];
+            // Map field names to actual data fields
+            let fieldName = field;
+            if (field === 'unrealized_pnl') {
+                fieldName = 'calculated_unrealized_pnl';
+            } else if (field === 'unrealized_pnl_pct') {
+                fieldName = 'calculated_unrealized_pnl_pct';
+            }
+
+            let aValue = a[fieldName];
+            let bValue = b[fieldName];
 
             // null/undefined を処理
             if (aValue === null || aValue === undefined) aValue = '';
@@ -590,7 +603,9 @@
                 'ticker_symbol': 0,
                 'security_name': 1,
                 'total_cost': 5,
-                'current_value': 6
+                'current_value': 6,
+                'unrealized_pnl': 7,
+                'unrealized_pnl_pct': 8
             };
             const index = fieldMap[currentSortField];
             if (index !== undefined) {
