@@ -44,8 +44,13 @@ class Holding(db.Model):
 
     def update_current_price(self, price):
         """株価更新と損益計算"""
-        self.current_price = price
-        self.current_value = self.total_quantity * price
+        from decimal import Decimal
+
+        # Convert price to Decimal for consistent type handling
+        price_decimal = Decimal(str(price))
+
+        self.current_price = price_decimal
+        self.current_value = self.total_quantity * price_decimal
         self.unrealized_pnl = self.current_value - self.total_cost
         if self.total_cost > 0:
             self.unrealized_pnl_pct = (self.unrealized_pnl / self.total_cost) * 100

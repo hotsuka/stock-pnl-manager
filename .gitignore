@@ -65,6 +65,7 @@ docs/_build/
 check_*.py
 test_*.py
 recalculate_all.py
+update_prices_manual.py
 
 # Uploads
 data/uploads/*.csv
