@@ -207,7 +207,7 @@
                         <td class="text-end" id="total-cost"><strong>-</strong></td>
                         <td class="text-end" id="total-value"><strong>-</strong></td>
                         <td class="text-end" id="holdings-total-pnl"><strong>-</strong></td>
-                        <td></td>
+                        <td class="text-end" id="holdings-total-pnl-pct"><strong>-</strong></td>
                     </tr>
                 </tfoot>
             </table>
@@ -543,6 +543,11 @@
         const pnlClass = totalPnL >= 0 ? 'positive' : 'negative';
         document.getElementById('holdings-total-pnl').innerHTML = `<strong class="${pnlClass}">${formatCurrency(totalPnL)}</strong>`;
         document.getElementById('holdings-total-pnl').className = `text-end ${pnlClass}`;
+
+        // Calculate and display total P&L percentage
+        const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
+        document.getElementById('holdings-total-pnl-pct').innerHTML = `<strong class="${pnlClass}">${formatPercentage(totalPnLPct)}</strong>`;
+        document.getElementById('holdings-total-pnl-pct').className = `text-end ${pnlClass}`;
 
         document.getElementById('holdings-tfoot').classList.remove('d-none');
 
