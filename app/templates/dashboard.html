@@ -555,17 +555,12 @@
             const pnlClass = r.realized_pnl >= 0 ? 'text-success' : 'text-danger';
             const pnlPctClass = r.realized_pnl_pct >= 0 ? 'text-success' : 'text-danger';
 
-            // Format average cost with currency symbol
-            const avgCostDisplay = r.currency === 'USD'
-                ? `${formatPrice(r.average_cost, r.currency)} USD`
-                : formatPrice(r.average_cost, r.currency);
-
             return `
                 <tr>
                     <td>${r.ticker_symbol}</td>
                     <td>${r.security_name || '-'}</td>
                     <td class="text-end">${formatNumber(r.total_quantity)}</td>
-                    <td class="text-end">${avgCostDisplay}</td>
+                    <td class="text-end">${formatAverageCost(r)}</td>
                     <td class="text-end">${formatCurrency(r.total_cost)}</td>
                     <td class="text-end">${formatCurrency(r.sale_proceeds)}</td>
                     <td class="text-end ${pnlClass}">${formatCurrency(r.realized_pnl)}</td>
