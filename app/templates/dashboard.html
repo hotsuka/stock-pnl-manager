@@ -232,6 +232,7 @@
                         <th class="sortable" onclick="sortRealizedPnlTable('security_name')">銘柄名</th>
                         <th class="text-end">取得数量</th>
                         <th class="text-end">平均取得単価</th>
+                        <th class="sortable text-end" onclick="sortRealizedPnlTable('sale_unit_price')">売却単価</th>
                         <th class="sortable text-end" onclick="sortRealizedPnlTable('total_cost')">取得コスト</th>
                         <th class="sortable text-end" onclick="sortRealizedPnlTable('sale_proceeds')">売却額</th>
                         <th class="sortable text-end" onclick="sortRealizedPnlTable('realized_pnl')">実現済み損益</th>
@@ -240,14 +241,14 @@
                 </thead>
                 <tbody id="realized-pnl-tbody">
                     <tr>
-                        <td colspan="8" class="text-center">
+                        <td colspan="9" class="text-center">
                             <div class="loading">データを読み込み中...</div>
                         </td>
                     </tr>
                 </tbody>
                 <tfoot id="realized-pnl-tfoot" class="table-light d-none">
                     <tr>
-                        <td colspan="4" class="text-end"><strong>合計</strong></td>
+                        <td colspan="5" class="text-end"><strong>合計</strong></td>
                         <td class="text-end" id="realized-total-cost"><strong>-</strong></td>
                         <td class="text-end" id="realized-total-proceeds"><strong>-</strong></td>
                         <td class="text-end" id="realized-total-pnl"><strong>-</strong></td>
@@ -524,11 +525,11 @@
                 realizedPnlData = result.realized_pnl;
                 renderRealizedPnlTable(realizedPnlData);
             } else {
-                document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="8" class="text-center">売却済み銘柄がありません</td></tr>';
+                document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="9" class="text-center">売却済み銘柄がありません</td></tr>';
             }
         } catch (error) {
             console.error('実現損益データの読み込みエラー:', error);
-            document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
+            document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="9" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
         }
     }
 
@@ -555,12 +556,21 @@
             const pnlClass = r.realized_pnl >= 0 ? 'text-success' : 'text-danger';
             const pnlPctClass = r.realized_pnl_pct >= 0 ? 'text-success' : 'text-danger';
 
+            // Create object for sale unit price display (same format as average cost)
+            const saleUnitPriceObj = {
+                average_cost: r.sale_unit_price,
+                currency: r.currency,
+                total_cost: r.sale_proceeds,
+                total_quantity: r.total_quantity
+            };
+
             return `
                 <tr>
                     <td>${r.ticker_symbol}</td>
                     <td>${r.security_name || '-'}</td>
                     <td class="text-end">${formatNumber(r.total_quantity)}</td>
                     <td class="text-end">${formatAverageCost(r)}</td>
+                    <td class="text-end">${formatAverageCost(saleUnitPriceObj)}</td>
                     <td class="text-end">${formatCurrency(r.total_cost)}</td>
                     <td class="text-end">${formatCurrency(r.sale_proceeds)}</td>
                     <td class="text-end ${pnlClass}">${formatCurrency(r.realized_pnl)}</td>
@@ -875,10 +885,11 @@
             const fieldMap = {
                 'ticker_symbol': 0,
                 'security_name': 1,
-                'total_cost': 4,
-                'sale_proceeds': 5,
-                'realized_pnl': 6,
-                'realized_pnl_pct': 7
+                'sale_unit_price': 4,
+                'total_cost': 5,
+                'sale_proceeds': 6,
+                'realized_pnl': 7,
+                'realized_pnl_pct': 8
             };
             const index = fieldMap[currentRealizedSortField];
             if (index !== undefined) {

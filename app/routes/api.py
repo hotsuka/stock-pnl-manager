@@ -428,6 +428,17 @@ def get_realized_pnl():
             total_cost_jpy = total_cost_from_records
             average_unit_price = total_cost_jpy / total_quantity if total_quantity > 0 else 0
 
+        # Calculate sale unit price in stock's currency
+        if currency == 'USD':
+            # For USD stocks, calculate from JPY sale proceeds
+            sale_unit_price = (total_sale_proceeds_jpy / avg_exchange_rate) / total_quantity if total_quantity > 0 else 0
+        elif currency == 'KRW':
+            # For KRW stocks, calculate from JPY sale proceeds
+            sale_unit_price = (total_sale_proceeds_jpy / avg_exchange_rate) / total_quantity if total_quantity > 0 else 0
+        else:
+            # For JPY stocks, calculate directly
+            sale_unit_price = total_sale_proceeds_jpy / total_quantity if total_quantity > 0 else 0
+
         # Calculate realized P&L in JPY
         realized_pnl_jpy = total_sale_proceeds_jpy - total_cost_jpy
 
@@ -439,6 +450,7 @@ def get_realized_pnl():
             'security_name': security_name,
             'total_quantity': total_quantity,
             'average_cost': average_unit_price,
+            'sale_unit_price': sale_unit_price,
             'total_cost': total_cost_jpy,
             'sale_proceeds': total_sale_proceeds_jpy,
             'realized_pnl': realized_pnl_jpy,
