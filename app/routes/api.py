@@ -343,7 +343,14 @@ def get_realized_pnl():
         # Get security name from transaction
         transaction = Transaction.query.filter_by(ticker_symbol=ticker).first()
         security_name = transaction.security_name if transaction else None
-        currency = data['currency']
+
+        # Determine correct currency based on ticker symbol
+        if ticker.endswith('.T'):
+            currency = 'JPY'
+        elif ticker.endswith('.KS'):
+            currency = 'KRW'
+        else:
+            currency = 'USD'
 
         # Get all SELL transactions for this ticker (from realized_pnl records)
         realized_pnl_records = data['records']
@@ -351,9 +358,9 @@ def get_realized_pnl():
         # Calculate total quantity sold
         total_quantity = sum(float(r.quantity) for r in realized_pnl_records)
 
-        # Calculate total cost and sale proceeds from RealizedPnl records
-        # These amounts are in the stock's currency (USD for US stocks, JPY for Japanese stocks)
-        total_cost_stock_currency = sum(float(r.average_cost) * float(r.quantity) for r in realized_pnl_records)
+        # Calculate total cost from RealizedPnl records
+        # Note: RealizedPnl.average_cost might be in JPY (incorrect), need to handle this
+        total_cost_from_records = sum(float(r.average_cost) * float(r.quantity) for r in realized_pnl_records)
         total_proceeds_stock_currency = sum(float(r.sell_price) * float(r.quantity) for r in realized_pnl_records)
 
         # Get SELL transactions to get settlement amounts (in JPY)
@@ -367,7 +374,8 @@ def get_realized_pnl():
         total_sale_proceeds_jpy = sum(float(tx.settlement_amount) for tx in sell_transactions if tx.settlement_amount)
 
         # For cost, we need to calculate from the RealizedPnl data
-        # Convert stock currency cost to JPY
+        # The RealizedPnl.average_cost is in JPY for all stocks (due to old data)
+        # We need to convert to the correct currency for non-JPY stocks
         if currency == 'USD':
             # For US stocks, calculate implied exchange rate from sell transactions
             # settlement_amount (JPY) / (quantity * sell_price (USD)) = exchange rate
@@ -384,14 +392,40 @@ def get_realized_pnl():
 
             avg_exchange_rate = total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 150
 
-            # Convert cost to JPY using the same exchange rate
-            total_cost_jpy = total_cost_stock_currency * avg_exchange_rate
+            # total_cost_from_records is in JPY, convert to USD
+            total_cost_usd = total_cost_from_records / avg_exchange_rate
+
+            # Convert back to JPY for total_cost display
+            total_cost_jpy = total_cost_from_records
 
             # Average unit price in USD
-            average_unit_price = total_cost_stock_currency / total_quantity if total_quantity > 0 else 0
+            average_unit_price = total_cost_usd / total_quantity if total_quantity > 0 else 0
+        elif currency == 'KRW':
+            # For Korean stocks, similar logic
+            total_exchange_rate = 0
+            total_sell_qty = 0
+            for tx in sell_transactions:
+                if tx.settlement_amount and tx.unit_price:
+                    qty = float(tx.quantity)
+                    krw_amount = qty * float(tx.unit_price)
+                    if krw_amount > 0:
+                        implicit_rate = float(tx.settlement_amount) / krw_amount
+                        total_exchange_rate += implicit_rate * qty
+                        total_sell_qty += qty
+
+            avg_exchange_rate = total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 0.1
+
+            # total_cost_from_records is in JPY, convert to KRW
+            total_cost_krw = total_cost_from_records / avg_exchange_rate
+
+            # Keep JPY for total_cost display
+            total_cost_jpy = total_cost_from_records
+
+            # Average unit price in KRW
+            average_unit_price = total_cost_krw / total_quantity if total_quantity > 0 else 0
         else:
             # For JPY stocks, cost is already in JPY
-            total_cost_jpy = total_cost_stock_currency
+            total_cost_jpy = total_cost_from_records
             average_unit_price = total_cost_jpy / total_quantity if total_quantity > 0 else 0
 
         # Calculate realized P&L in JPY
