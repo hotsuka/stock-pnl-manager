@@ -345,57 +345,60 @@ def get_realized_pnl():
         security_name = transaction.security_name if transaction else None
         currency = data['currency']
 
-        # Calculate totals
-        total_quantity = sum(float(r.quantity) for r in data['records'])
+        # Get all SELL transactions for this ticker (from realized_pnl records)
+        realized_pnl_records = data['records']
 
-        # For cost and proceeds, we need to use settlement amounts from transactions
-        # Get all SELL transactions for this ticker
+        # Calculate total quantity sold
+        total_quantity = sum(float(r.quantity) for r in realized_pnl_records)
+
+        # Calculate total cost and sale proceeds from RealizedPnl records
+        # These amounts are in the stock's currency (USD for US stocks, JPY for Japanese stocks)
+        total_cost_stock_currency = sum(float(r.average_cost) * float(r.quantity) for r in realized_pnl_records)
+        total_proceeds_stock_currency = sum(float(r.sell_price) * float(r.quantity) for r in realized_pnl_records)
+
+        # Get SELL transactions to get settlement amounts (in JPY)
         sell_transactions = Transaction.query.filter_by(
             ticker_symbol=ticker,
             transaction_type='SELL'
         ).all()
 
-        # Get all BUY transactions for calculating average cost
-        buy_transactions = Transaction.query.filter_by(
-            ticker_symbol=ticker,
-            transaction_type='BUY'
-        ).all()
+        # Calculate sale proceeds in JPY from settlement amounts
+        # Note: settlement_amount is always in JPY regardless of settlement_currency value
+        total_sale_proceeds_jpy = sum(float(tx.settlement_amount) for tx in sell_transactions if tx.settlement_amount)
 
-        # Calculate total cost in JPY (settlement currency)
-        total_cost_jpy = 0
-        total_buy_quantity = 0
-        for tx in buy_transactions:
-            if tx.settlement_amount and tx.settlement_currency == 'JPY':
-                total_cost_jpy += float(tx.settlement_amount)
-                total_buy_quantity += float(tx.quantity)
+        # For cost, we need to calculate from the RealizedPnl data
+        # Convert stock currency cost to JPY
+        if currency == 'USD':
+            # For US stocks, calculate implied exchange rate from sell transactions
+            # settlement_amount (JPY) / (quantity * sell_price (USD)) = exchange rate
+            total_exchange_rate = 0
+            total_sell_qty = 0
+            for tx in sell_transactions:
+                if tx.settlement_amount and tx.unit_price:
+                    qty = float(tx.quantity)
+                    usd_amount = qty * float(tx.unit_price)
+                    if usd_amount > 0:
+                        implicit_rate = float(tx.settlement_amount) / usd_amount
+                        total_exchange_rate += implicit_rate * qty
+                        total_sell_qty += qty
 
-        # Calculate sale proceeds in JPY
-        total_sale_proceeds_jpy = 0
-        for tx in sell_transactions:
-            if tx.settlement_amount and tx.settlement_currency == 'JPY':
-                total_sale_proceeds_jpy += float(tx.settlement_amount)
+            avg_exchange_rate = total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 150
+
+            # Convert cost to JPY using the same exchange rate
+            total_cost_jpy = total_cost_stock_currency * avg_exchange_rate
+
+            # Average unit price in USD
+            average_unit_price = total_cost_stock_currency / total_quantity if total_quantity > 0 else 0
+        else:
+            # For JPY stocks, cost is already in JPY
+            total_cost_jpy = total_cost_stock_currency
+            average_unit_price = total_cost_jpy / total_quantity if total_quantity > 0 else 0
 
         # Calculate realized P&L in JPY
         realized_pnl_jpy = total_sale_proceeds_jpy - total_cost_jpy
 
         # Calculate P&L percentage
         pnl_pct = (realized_pnl_jpy / total_cost_jpy * 100) if total_cost_jpy > 0 else 0
-
-        # Calculate average unit price
-        # For USD stocks, convert to USD using average exchange rate
-        average_unit_price = 0
-        if currency == 'USD' and total_buy_quantity > 0:
-            # Get average exchange rate from buy transactions
-            total_exchange = sum(float(tx.exchange_rate or 0) * float(tx.quantity)
-                               for tx in buy_transactions if tx.exchange_rate)
-            avg_exchange_rate = total_exchange / total_buy_quantity if total_buy_quantity > 0 else 1
-
-            # Convert JPY cost to USD using average exchange rate
-            if avg_exchange_rate > 0:
-                average_unit_price = (total_cost_jpy / avg_exchange_rate) / total_buy_quantity
-        else:
-            # For JPY stocks, just divide total cost by quantity
-            average_unit_price = total_cost_jpy / total_buy_quantity if total_buy_quantity > 0 else 0
 
         realized_pnl_list.append({
             'ticker_symbol': ticker,
