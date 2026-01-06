@@ -31,23 +31,47 @@ with app.app_context():
             yf_ticker = format_ticker(holding.ticker_symbol)
             stock = yf.Ticker(yf_ticker)
 
-            # Try to get current price and previous close from info
+            # Get the most recent price data
+            # First, try to get real-time price from info
+            current_price = None
+            previous_close = None
+
             try:
                 info = stock.info
                 current_price = info.get('currentPrice') or info.get('regularMarketPrice')
                 previous_close = info.get('previousClose')
             except:
-                # Fallback to history
-                hist = stock.history(period='2d')
-                if not hist.empty:
-                    current_price = float(hist['Close'].iloc[-1])
-                    previous_close = float(hist['Close'].iloc[-2]) if len(hist) > 1 else None
-                else:
-                    print(f"  [SKIP] {holding.ticker_symbol}: No data available")
-                    continue
+                pass
+
+            # If info doesn't provide current price, use history
+            # Get more days to handle weekends and holidays
+            if current_price is None:
+                try:
+                    hist = stock.history(period='5d')
+                    if not hist.empty:
+                        current_price = float(hist['Close'].iloc[-1])
+                        previous_close = float(hist['Close'].iloc[-2]) if len(hist) > 1 else None
+                except:
+                    pass
+
+            # If still no current price, try to get today's intraday data
+            if current_price is None:
+                try:
+                    # Get today's data with 1-minute interval to get latest price
+                    intraday = stock.history(period='1d', interval='1m')
+                    if not intraday.empty:
+                        current_price = float(intraday['Close'].iloc[-1])
+                        # For previous close, get 5-day history
+                        hist = stock.history(period='5d')
+                        if len(hist) >= 2:
+                            previous_close = float(hist['Close'].iloc[-2])
+                        elif len(hist) == 1:
+                            previous_close = float(hist['Close'].iloc[0])
+                except:
+                    pass
 
             if current_price is None:
-                print(f"  [SKIP] {holding.ticker_symbol}: No current price")
+                print(f"  [SKIP] {holding.ticker_symbol}: No data available")
                 continue
 
             # Update current price
