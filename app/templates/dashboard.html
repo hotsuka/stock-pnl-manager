@@ -219,6 +219,44 @@
             </table>
         </div>
     </div>
+
+    <!-- 売却済み銘柄テーブル -->
+    <div class="table-container mt-4">
+        <div class="chart-title">売却済み銘柄一覧</div>
+
+        <div class="table-responsive">
+            <table class="table table-hover" id="realized-pnl-table">
+                <thead>
+                    <tr>
+                        <th>ティッカー</th>
+                        <th>銘柄名</th>
+                        <th class="text-end">取得数量</th>
+                        <th class="text-end">平均取得単価</th>
+                        <th class="text-end">取得コスト</th>
+                        <th class="text-end">売却額</th>
+                        <th class="text-end">実現済み損益</th>
+                        <th class="text-end">損益率</th>
+                    </tr>
+                </thead>
+                <tbody id="realized-pnl-tbody">
+                    <tr>
+                        <td colspan="8" class="text-center">
+                            <div class="loading">データを読み込み中...</div>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot id="realized-pnl-tfoot" class="table-light d-none">
+                    <tr>
+                        <td colspan="4" class="text-end"><strong>合計</strong></td>
+                        <td class="text-end" id="realized-total-cost"><strong>-</strong></td>
+                        <td class="text-end" id="realized-total-proceeds"><strong>-</strong></td>
+                        <td class="text-end" id="realized-total-pnl"><strong>-</strong></td>
+                        <td class="text-end" id="realized-total-pnl-pct"><strong>-</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -246,7 +284,8 @@
         await Promise.all([
             loadSummary(),
             loadPnlHistory(currentPeriod),
-            loadHoldingsTable()  // This will also create the portfolio treemap
+            loadHoldingsTable(),  // This will also create the portfolio treemap
+            loadRealizedPnlTable()
         ]);
     }
 
@@ -471,6 +510,74 @@
             console.error('保有銘柄データの読み込みエラー:', error);
             document.getElementById('holdings-tbody').innerHTML = '<tr><td colspan="9" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
         }
+    }
+
+    async function loadRealizedPnlTable() {
+        try {
+            const response = await fetch('/api/realized-pnl');
+            const result = await response.json();
+
+            if (result.success && result.realized_pnl.length > 0) {
+                renderRealizedPnlTable(result.realized_pnl);
+            } else {
+                document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="8" class="text-center">売却済み銘柄がありません</td></tr>';
+            }
+        } catch (error) {
+            console.error('実現損益データの読み込みエラー:', error);
+            document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
+        }
+    }
+
+    function renderRealizedPnlTable(realizedPnlData) {
+        const tbody = document.getElementById('realized-pnl-tbody');
+        const tfoot = document.getElementById('realized-pnl-tfoot');
+
+        // Calculate totals
+        let totalCost = 0;
+        let totalProceeds = 0;
+        let totalPnl = 0;
+
+        const rows = realizedPnlData.map(r => {
+            // Convert to JPY for totals
+            const costJPY = convertToJPY(r.total_cost, r.currency) || 0;
+            const proceedsJPY = convertToJPY(r.sale_proceeds, r.currency) || 0;
+            const pnlJPY = convertToJPY(r.realized_pnl, r.currency) || 0;
+
+            totalCost += costJPY;
+            totalProceeds += proceedsJPY;
+            totalPnl += pnlJPY;
+
+            const pnlClass = r.realized_pnl >= 0 ? 'text-success' : 'text-danger';
+            const pnlPctClass = r.realized_pnl_pct >= 0 ? 'text-success' : 'text-danger';
+
+            return `
+                <tr>
+                    <td>${r.ticker_symbol}</td>
+                    <td>${r.security_name || '-'}</td>
+                    <td class="text-end">${formatNumber(r.total_quantity)}</td>
+                    <td class="text-end">${formatPrice(r.average_cost, r.currency)}</td>
+                    <td class="text-end">${formatPriceWithConversion(r.total_cost, r.currency)}</td>
+                    <td class="text-end">${formatPriceWithConversion(r.sale_proceeds, r.currency)}</td>
+                    <td class="text-end ${pnlClass}">${formatPriceWithConversion(r.realized_pnl, r.currency)}</td>
+                    <td class="text-end ${pnlPctClass}">${formatPercentage(r.realized_pnl_pct)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        tbody.innerHTML = rows;
+
+        // Update footer with totals
+        const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost * 100) : 0;
+        const totalPnlClass = totalPnl >= 0 ? 'text-success' : 'text-danger';
+        const totalPnlPctClass = totalPnlPct >= 0 ? 'text-success' : 'text-danger';
+
+        document.getElementById('realized-total-cost').innerHTML = `<strong>${formatCurrency(totalCost)}</strong>`;
+        document.getElementById('realized-total-proceeds').innerHTML = `<strong>${formatCurrency(totalProceeds)}</strong>`;
+        document.getElementById('realized-total-pnl').innerHTML = `<strong class="${totalPnlClass}">${formatCurrency(totalPnl)}</strong>`;
+        document.getElementById('realized-total-pnl-pct').innerHTML = `<strong class="${totalPnlPctClass}">${formatPercentage(totalPnlPct)}</strong>`;
+
+        // Show footer
+        tfoot.classList.remove('d-none');
     }
 
     // 通貨をJPYに換算

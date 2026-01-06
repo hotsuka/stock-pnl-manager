@@ -316,6 +316,55 @@ def delete_transactions():
         }), 500
 
 
+@bp.route('/realized-pnl', methods=['GET'])
+def get_realized_pnl():
+    """Get all realized P&L records grouped by ticker"""
+    from sqlalchemy import func
+    from app import db
+
+    # Get all realized P&L records grouped by ticker
+    results = db.session.query(
+        RealizedPnl.ticker_symbol,
+        func.sum(RealizedPnl.quantity).label('total_quantity'),
+        func.avg(RealizedPnl.average_cost).label('avg_cost'),
+        func.sum(RealizedPnl.quantity * RealizedPnl.average_cost).label('total_cost'),
+        func.sum(RealizedPnl.quantity * RealizedPnl.sell_price).label('sale_proceeds'),
+        func.sum(RealizedPnl.realized_pnl).label('total_realized_pnl'),
+        RealizedPnl.currency
+    ).group_by(RealizedPnl.ticker_symbol, RealizedPnl.currency).all()
+
+    realized_pnl_list = []
+    for r in results:
+        # Get security name from the most recent transaction
+        transaction = Transaction.query.filter_by(ticker_symbol=r.ticker_symbol).first()
+        security_name = transaction.security_name if transaction else None
+
+        total_cost = float(r.total_cost) if r.total_cost else 0
+        sale_proceeds = float(r.sale_proceeds) if r.sale_proceeds else 0
+        total_realized_pnl = float(r.total_realized_pnl) if r.total_realized_pnl else 0
+
+        # Calculate P&L percentage
+        pnl_pct = (total_realized_pnl / total_cost * 100) if total_cost > 0 else 0
+
+        realized_pnl_list.append({
+            'ticker_symbol': r.ticker_symbol,
+            'security_name': security_name,
+            'total_quantity': float(r.total_quantity) if r.total_quantity else 0,
+            'average_cost': float(r.avg_cost) if r.avg_cost else 0,
+            'total_cost': total_cost,
+            'sale_proceeds': sale_proceeds,
+            'realized_pnl': total_realized_pnl,
+            'realized_pnl_pct': pnl_pct,
+            'currency': r.currency
+        })
+
+    return jsonify({
+        'success': True,
+        'count': len(realized_pnl_list),
+        'realized_pnl': realized_pnl_list
+    })
+
+
 @bp.route('/dashboard/summary', methods=['GET'])
 def get_dashboard_summary():
     """Get dashboard summary data"""
