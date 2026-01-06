@@ -321,41 +321,92 @@ def get_realized_pnl():
     """Get all realized P&L records grouped by ticker"""
     from sqlalchemy import func
     from app import db
+    from decimal import Decimal
 
-    # Get all realized P&L records grouped by ticker
-    results = db.session.query(
-        RealizedPnl.ticker_symbol,
-        func.sum(RealizedPnl.quantity).label('total_quantity'),
-        func.avg(RealizedPnl.average_cost).label('avg_cost'),
-        func.sum(RealizedPnl.quantity * RealizedPnl.average_cost).label('total_cost'),
-        func.sum(RealizedPnl.quantity * RealizedPnl.sell_price).label('sale_proceeds'),
-        func.sum(RealizedPnl.realized_pnl).label('total_realized_pnl'),
-        RealizedPnl.currency
-    ).group_by(RealizedPnl.ticker_symbol, RealizedPnl.currency).all()
+    # Get all realized P&L records with all details
+    realized_records = RealizedPnl.query.all()
+
+    # Group by ticker
+    ticker_data = {}
+    for record in realized_records:
+        ticker = record.ticker_symbol
+        if ticker not in ticker_data:
+            ticker_data[ticker] = {
+                'ticker_symbol': ticker,
+                'currency': record.currency,
+                'records': []
+            }
+        ticker_data[ticker]['records'].append(record)
 
     realized_pnl_list = []
-    for r in results:
-        # Get security name from the most recent transaction
-        transaction = Transaction.query.filter_by(ticker_symbol=r.ticker_symbol).first()
+    for ticker, data in ticker_data.items():
+        # Get security name from transaction
+        transaction = Transaction.query.filter_by(ticker_symbol=ticker).first()
         security_name = transaction.security_name if transaction else None
+        currency = data['currency']
 
-        total_cost = float(r.total_cost) if r.total_cost else 0
-        sale_proceeds = float(r.sale_proceeds) if r.sale_proceeds else 0
-        total_realized_pnl = float(r.total_realized_pnl) if r.total_realized_pnl else 0
+        # Calculate totals
+        total_quantity = sum(float(r.quantity) for r in data['records'])
+
+        # For cost and proceeds, we need to use settlement amounts from transactions
+        # Get all SELL transactions for this ticker
+        sell_transactions = Transaction.query.filter_by(
+            ticker_symbol=ticker,
+            transaction_type='SELL'
+        ).all()
+
+        # Get all BUY transactions for calculating average cost
+        buy_transactions = Transaction.query.filter_by(
+            ticker_symbol=ticker,
+            transaction_type='BUY'
+        ).all()
+
+        # Calculate total cost in JPY (settlement currency)
+        total_cost_jpy = 0
+        total_buy_quantity = 0
+        for tx in buy_transactions:
+            if tx.settlement_amount and tx.settlement_currency == 'JPY':
+                total_cost_jpy += float(tx.settlement_amount)
+                total_buy_quantity += float(tx.quantity)
+
+        # Calculate sale proceeds in JPY
+        total_sale_proceeds_jpy = 0
+        for tx in sell_transactions:
+            if tx.settlement_amount and tx.settlement_currency == 'JPY':
+                total_sale_proceeds_jpy += float(tx.settlement_amount)
+
+        # Calculate realized P&L in JPY
+        realized_pnl_jpy = total_sale_proceeds_jpy - total_cost_jpy
 
         # Calculate P&L percentage
-        pnl_pct = (total_realized_pnl / total_cost * 100) if total_cost > 0 else 0
+        pnl_pct = (realized_pnl_jpy / total_cost_jpy * 100) if total_cost_jpy > 0 else 0
+
+        # Calculate average unit price
+        # For USD stocks, convert to USD using average exchange rate
+        average_unit_price = 0
+        if currency == 'USD' and total_buy_quantity > 0:
+            # Get average exchange rate from buy transactions
+            total_exchange = sum(float(tx.exchange_rate or 0) * float(tx.quantity)
+                               for tx in buy_transactions if tx.exchange_rate)
+            avg_exchange_rate = total_exchange / total_buy_quantity if total_buy_quantity > 0 else 1
+
+            # Convert JPY cost to USD using average exchange rate
+            if avg_exchange_rate > 0:
+                average_unit_price = (total_cost_jpy / avg_exchange_rate) / total_buy_quantity
+        else:
+            # For JPY stocks, just divide total cost by quantity
+            average_unit_price = total_cost_jpy / total_buy_quantity if total_buy_quantity > 0 else 0
 
         realized_pnl_list.append({
-            'ticker_symbol': r.ticker_symbol,
+            'ticker_symbol': ticker,
             'security_name': security_name,
-            'total_quantity': float(r.total_quantity) if r.total_quantity else 0,
-            'average_cost': float(r.avg_cost) if r.avg_cost else 0,
-            'total_cost': total_cost,
-            'sale_proceeds': sale_proceeds,
-            'realized_pnl': total_realized_pnl,
+            'total_quantity': total_quantity,
+            'average_cost': average_unit_price,
+            'total_cost': total_cost_jpy,
+            'sale_proceeds': total_sale_proceeds_jpy,
+            'realized_pnl': realized_pnl_jpy,
             'realized_pnl_pct': pnl_pct,
-            'currency': r.currency
+            'currency': currency
         })
 
     return jsonify({

@@ -228,14 +228,14 @@
             <table class="table table-hover" id="realized-pnl-table">
                 <thead>
                     <tr>
-                        <th>ティッカー</th>
-                        <th>銘柄名</th>
+                        <th class="sortable" onclick="sortRealizedPnlTable('ticker_symbol')">ティッカー</th>
+                        <th class="sortable" onclick="sortRealizedPnlTable('security_name')">銘柄名</th>
                         <th class="text-end">取得数量</th>
                         <th class="text-end">平均取得単価</th>
-                        <th class="text-end">取得コスト</th>
-                        <th class="text-end">売却額</th>
-                        <th class="text-end">実現済み損益</th>
-                        <th class="text-end">損益率</th>
+                        <th class="sortable text-end" onclick="sortRealizedPnlTable('total_cost')">取得コスト</th>
+                        <th class="sortable text-end" onclick="sortRealizedPnlTable('sale_proceeds')">売却額</th>
+                        <th class="sortable text-end" onclick="sortRealizedPnlTable('realized_pnl')">実現済み損益</th>
+                        <th class="sortable text-end" onclick="sortRealizedPnlTable('realized_pnl_pct')">損益率</th>
                     </tr>
                 </thead>
                 <tbody id="realized-pnl-tbody">
@@ -269,6 +269,9 @@
     let currentSortDirection = 'asc';
     let exchangeRates = {};  // Store exchange rates
     let currentPortfolioMode = 'pnl';  // 'pnl' or 'day_change'
+    let realizedPnlData = [];
+    let currentRealizedSortField = null;
+    let currentRealizedSortDirection = 'asc';
 
     // ページ読み込み時にデータ取得
     document.addEventListener('DOMContentLoaded', function() {
@@ -518,7 +521,8 @@
             const result = await response.json();
 
             if (result.success && result.realized_pnl.length > 0) {
-                renderRealizedPnlTable(result.realized_pnl);
+                realizedPnlData = result.realized_pnl;
+                renderRealizedPnlTable(realizedPnlData);
             } else {
                 document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="8" class="text-center">売却済み銘柄がありません</td></tr>';
             }
@@ -528,37 +532,43 @@
         }
     }
 
-    function renderRealizedPnlTable(realizedPnlData) {
+    function renderRealizedPnlTable(data) {
         const tbody = document.getElementById('realized-pnl-tbody');
         const tfoot = document.getElementById('realized-pnl-tfoot');
 
-        // Calculate totals
+        // Use the global data if no data is passed
+        if (!data) {
+            data = realizedPnlData;
+        }
+
+        // Calculate totals (all amounts are already in JPY)
         let totalCost = 0;
         let totalProceeds = 0;
         let totalPnl = 0;
 
-        const rows = realizedPnlData.map(r => {
-            // Convert to JPY for totals
-            const costJPY = convertToJPY(r.total_cost, r.currency) || 0;
-            const proceedsJPY = convertToJPY(r.sale_proceeds, r.currency) || 0;
-            const pnlJPY = convertToJPY(r.realized_pnl, r.currency) || 0;
-
-            totalCost += costJPY;
-            totalProceeds += proceedsJPY;
-            totalPnl += pnlJPY;
+        const rows = data.map(r => {
+            // All costs and P&L are already in JPY
+            totalCost += r.total_cost || 0;
+            totalProceeds += r.sale_proceeds || 0;
+            totalPnl += r.realized_pnl || 0;
 
             const pnlClass = r.realized_pnl >= 0 ? 'text-success' : 'text-danger';
             const pnlPctClass = r.realized_pnl_pct >= 0 ? 'text-success' : 'text-danger';
+
+            // Format average cost with currency symbol
+            const avgCostDisplay = r.currency === 'USD'
+                ? `${formatPrice(r.average_cost, r.currency)} USD`
+                : formatPrice(r.average_cost, r.currency);
 
             return `
                 <tr>
                     <td>${r.ticker_symbol}</td>
                     <td>${r.security_name || '-'}</td>
                     <td class="text-end">${formatNumber(r.total_quantity)}</td>
-                    <td class="text-end">${formatPrice(r.average_cost, r.currency)}</td>
-                    <td class="text-end">${formatPriceWithConversion(r.total_cost, r.currency)}</td>
-                    <td class="text-end">${formatPriceWithConversion(r.sale_proceeds, r.currency)}</td>
-                    <td class="text-end ${pnlClass}">${formatPriceWithConversion(r.realized_pnl, r.currency)}</td>
+                    <td class="text-end">${avgCostDisplay}</td>
+                    <td class="text-end">${formatCurrency(r.total_cost)}</td>
+                    <td class="text-end">${formatCurrency(r.sale_proceeds)}</td>
+                    <td class="text-end ${pnlClass}">${formatCurrency(r.realized_pnl)}</td>
                     <td class="text-end ${pnlPctClass}">${formatPercentage(r.realized_pnl_pct)}</td>
                 </tr>
             `;
@@ -812,6 +822,73 @@
             if (index !== undefined) {
                 const headers = document.querySelectorAll('#holdings-table thead th');
                 headers[index].classList.add(currentSortDirection);
+            }
+        }
+    }
+
+    // 売却済み銘柄テーブルのソート
+    function sortRealizedPnlTable(field) {
+        // 同じフィールドをクリックした場合は昇順/降順を切り替え
+        if (currentRealizedSortField === field) {
+            currentRealizedSortDirection = currentRealizedSortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentRealizedSortField = field;
+            currentRealizedSortDirection = 'asc';
+        }
+
+        // データを並べ替え
+        realizedPnlData.sort((a, b) => {
+            let aValue = a[field];
+            let bValue = b[field];
+
+            // null/undefined を処理
+            if (aValue === null || aValue === undefined) aValue = '';
+            if (bValue === null || bValue === undefined) bValue = '';
+
+            // 文字列の場合は大文字小文字を区別せずに比較
+            if (typeof aValue === 'string') {
+                aValue = aValue.toLowerCase();
+                bValue = bValue.toLowerCase();
+            }
+
+            let comparison = 0;
+            if (aValue > bValue) {
+                comparison = 1;
+            } else if (aValue < bValue) {
+                comparison = -1;
+            }
+
+            return currentRealizedSortDirection === 'asc' ? comparison : -comparison;
+        });
+
+        // テーブルを再描画
+        renderRealizedPnlTable();
+
+        // ソートインジケーターを更新
+        updateRealizedSortIndicators();
+    }
+
+    // 売却済み銘柄テーブルのソートインジケーターを更新
+    function updateRealizedSortIndicators() {
+        // すべてのソートクラスを削除
+        document.querySelectorAll('#realized-pnl-table .sortable').forEach(th => {
+            th.classList.remove('asc', 'desc');
+        });
+
+        // 現在のソート列にクラスを追加
+        if (currentRealizedSortField) {
+            const fieldMap = {
+                'ticker_symbol': 0,
+                'security_name': 1,
+                'total_cost': 4,
+                'sale_proceeds': 5,
+                'realized_pnl': 6,
+                'realized_pnl_pct': 7
+            };
+            const index = fieldMap[currentRealizedSortField];
+            if (index !== undefined) {
+                const headers = document.querySelectorAll('#realized-pnl-table thead th');
+                headers[index].classList.add(currentRealizedSortDirection);
             }
         }
     }
