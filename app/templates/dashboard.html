@@ -704,7 +704,7 @@
                     <td><strong>${h.ticker_symbol}</strong></td>
                     <td>${h.security_name || '-'}</td>
                     <td class="text-end">${formatNumber(h.total_quantity)}</td>
-                    <td class="text-end">${formatPrice(h.average_cost, h.currency)} ${h.currency}</td>
+                    <td class="text-end">${formatAverageCost(h)}</td>
                     <td class="text-end">${formatPriceWithPreviousClose(h.current_price, h.previous_close, h.currency)}</td>
                     <td class="text-end">${h.total_cost ? formatCurrency(h.total_cost) : '-'}</td>
                     <td class="text-end">${formatValueInJPY(h.current_value, h.currency)}</td>
@@ -1005,6 +1005,23 @@
             minimumFractionDigits: decimals,
             maximumFractionDigits: decimals
         });
+    }
+
+    function formatAverageCost(holding) {
+        if (!holding.average_cost) return '-';
+
+        const avgCost = formatPrice(holding.average_cost, holding.currency);
+        let result = `${avgCost} ${holding.currency}`;
+
+        // For non-JPY stocks, add JPY equivalent in parentheses
+        if (holding.currency !== 'JPY' && holding.currency !== '日本円') {
+            if (holding.total_cost && holding.total_quantity) {
+                const jpyPerShare = holding.total_cost / holding.total_quantity;
+                result += `<br><small style="color: #6c757d;">(実質: ${formatCurrency(jpyPerShare)}円)</small>`;
+            }
+        }
+
+        return result;
     }
 
     function formatNumber(value) {
