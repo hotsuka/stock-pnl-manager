@@ -907,19 +907,29 @@ def get_pnl_history():
 @bp.route('/performance/history', methods=['GET'])
 def get_performance_history():
     """Get investment performance history (daily or monthly)"""
-    period = request.args.get('period', '1m') # '1m' for daily, '1y' for monthly
+    try:
+        period = request.args.get('period', '1m') # '1m' for daily, '1y' for monthly
 
-    if period == '1y':
-        data = PerformanceService.get_monthly_performance_history()
-    else:
-        # Default to 30 days daily
-        data = PerformanceService.get_performance_history(days=30)
+        if period == '1y':
+            data = PerformanceService.get_monthly_performance_history()
+        else:
+            # Default to 30 days daily
+            data = PerformanceService.get_performance_history(days=30)
 
-    return jsonify({
-        'success': True,
-        'period': period,
-        'data': data
-    })
+        return jsonify({
+            'success': True,
+            'period': period,
+            'data': data
+        })
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"ERROR in get_performance_history: {error_detail}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'detail': error_detail
+        }), 500
 
 @bp.route('/performance/detail', methods=['GET'])
 def get_performance_detail():

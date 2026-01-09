@@ -139,32 +139,75 @@ class CSVParser:
                 normalized_row[cls.COLUMN_MAPPING[key]] = value
 
         # 必須項目チェック
-        required_fields = ['transaction_date', 'ticker_symbol', 'transaction_type', 
+        required_fields = ['transaction_date', 'ticker_symbol', 'transaction_type',
                           'quantity', 'unit_price']
-        
+
         for field in required_fields:
             if field not in normalized_row or not normalized_row[field]:
                 raise ValueError(f"必須項目が不足: {field}")
 
+        # ティッカーシンボルを正規化
+        ticker_symbol = normalized_row['ticker_symbol'].strip().upper()
+
+        # 通貨を判定（CSVに通貨カラムがあればそれを使用、なければティッカーから推測）
+        if 'currency' in normalized_row and normalized_row['currency']:
+            currency = normalized_row['currency'].strip().upper()
+        else:
+            currency = cls._detect_currency_from_ticker(ticker_symbol)
+
         # データ変換
         transaction_data = {
             'transaction_date': cls.parse_date(normalized_row['transaction_date']),
-            'ticker_symbol': normalized_row['ticker_symbol'].strip().upper(),
+            'ticker_symbol': ticker_symbol,
             'security_name': normalized_row.get('security_name', '').strip(),
             'transaction_type': cls._parse_transaction_type(normalized_row['transaction_type']),
             'quantity': cls.parse_number(normalized_row['quantity']),
             'unit_price': cls.parse_number(normalized_row['unit_price']),
             'commission': cls.parse_number(normalized_row.get('commission', '0')),
             'settlement_amount': cls.parse_number(normalized_row.get('settlement_amount')),
-            'currency': normalized_row.get('currency', 'JPY').strip().upper(),
+            'currency': currency,
             'exchange_rate': cls.parse_number(normalized_row.get('exchange_rate')),
-            'settlement_currency': normalized_row.get('currency', 'JPY').strip().upper()
+            'settlement_currency': currency
         }
 
         # バリデーション
         cls._validate_transaction(transaction_data)
 
         return transaction_data
+
+    @staticmethod
+    def _detect_currency_from_ticker(ticker_symbol):
+        """
+        ティッカーシンボルから通貨を推測
+
+        Args:
+            ticker_symbol: ティッカーシンボル (e.g., 'AAPL', '7203.T', '6498.T')
+
+        Returns:
+            str: 通貨コード ('USD', 'JPY', etc.)
+        """
+        ticker_upper = ticker_symbol.upper()
+
+        # 日本株の判定
+        # 1. .T サフィックスがある
+        # 2. 数字のみ（4桁または5桁）
+        if ticker_upper.endswith('.T') or ticker_upper.replace('.', '').isdigit():
+            return 'JPY'
+
+        # 韓国株の判定 (.KS, .KQ サフィックス)
+        if ticker_upper.endswith('.KS') or ticker_upper.endswith('.KQ'):
+            return 'KRW'
+
+        # 香港株の判定 (.HK サフィックス)
+        if ticker_upper.endswith('.HK'):
+            return 'HKD'
+
+        # 英国株の判定 (.L サフィックス)
+        if ticker_upper.endswith('.L'):
+            return 'GBP'
+
+        # その他はデフォルトでUSD（米国株）
+        return 'USD'
 
     @classmethod
     def _parse_transaction_type(cls, type_str):

@@ -44,3 +44,9 @@ def transactions():
 def performance():
     """Performance History page"""
     return render_template('performance.html')
+
+
+@bp.route('/test-performance')
+def test_performance():
+    """Performance API Test page"""
+    return render_template('test_performance.html')

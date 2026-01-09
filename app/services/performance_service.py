@@ -13,13 +13,25 @@ class PerformanceService:
         """
         過去N日間の日次損益推移を計算する
         """
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=days)
-        
-        # 1. 全取引履歴を取得
-        transactions = Transaction.query.order_by(Transaction.transaction_date).all()
-        if not transactions:
-            return []
+        try:
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=days)
+
+            print(f"DEBUG: get_performance_history called with days={days}")
+            print(f"DEBUG: Period: {start_date} to {end_date}")
+
+            # 1. 全取引履歴を取得
+            transactions = Transaction.query.order_by(Transaction.transaction_date).all()
+            if not transactions:
+                print("DEBUG: No transactions found")
+                return []
+
+            print(f"DEBUG: Found {len(transactions)} transactions")
+        except Exception as e:
+            print(f"ERROR in get_performance_history initialization: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
         # 2. 過去の全保有銘柄を特定
         all_tickers = sorted(list(set(t.ticker_symbol for t in transactions)))
@@ -45,6 +57,7 @@ class PerformanceService:
         for i in range(0, len(yf_tickers), batch_size):
             batch = yf_tickers[i:i+batch_size]
             try:
+                print(f"DEBUG: Downloading batch {i//batch_size + 1}/{(len(yf_tickers)-1)//batch_size + 1}: {len(batch)} tickers")
                 # auto_adjust=True を使用して、常に調整後終値を 'Close' として取得
                 batch_data = yf.download(batch, start=download_start, end=end_date + timedelta(days=2), interval='1d', progress=False, auto_adjust=True)
                 if not batch_data.empty:
@@ -58,8 +71,11 @@ class PerformanceService:
                         elif len(batch) == 1:
                             # 1銘柄で MultiIndex でない場合、そのまま Close カラムがあるはず
                             all_data_frames.append(batch_data[['Close']].rename(columns={'Close': batch[0]}))
+                    print(f"DEBUG: Batch {i//batch_size + 1} completed successfully")
             except Exception as e:
-                print(f"DEBUG: Batch {batch} failed: {e}")
+                print(f"ERROR: Batch {batch} failed: {e}")
+                import traceback
+                traceback.print_exc()
 
         if not all_data_frames:
             print("DEBUG: No price data obtained.")
