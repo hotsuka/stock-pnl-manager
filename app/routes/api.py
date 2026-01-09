@@ -2,43 +2,68 @@
 API endpoints for data operations
 """
 
-from flask import Blueprint, jsonify, request
-from app.services import StockPriceFetcher, ExchangeRateFetcher, DividendFetcher
+from flask import Blueprint, jsonify, request, current_app
+from app.services import StockPriceFetcher, ExchangeRateFetcher, DividendFetcher, PerformanceService, StockMetricsFetcher
 from app.models import Holding, Transaction, Dividend, RealizedPnl
+from app.utils.errors import (
+    ValidationError, NotFoundError, DatabaseError, ExternalAPIError,
+    validate_required_fields, validate_positive_number, validate_date_format
+)
+from app.utils.logger import get_logger, log_api_call
 
 bp = Blueprint('api', __name__, url_prefix='/api')
+logger = get_logger('api')
 
 
 @bp.route('/stock-price/<ticker>', methods=['GET'])
 def get_stock_price(ticker):
     """Get current stock price for a ticker"""
-    use_cache = request.args.get('cache', 'true').lower() == 'true'
+    try:
+        log_api_call(logger, '/stock-price/<ticker>', 'GET', {'ticker': ticker})
 
-    price_data = StockPriceFetcher.get_current_price(ticker, use_cache=use_cache)
+        if not ticker:
+            raise ValidationError("ティッカーシンボルが指定されていません")
 
-    if price_data:
-        return jsonify({
-            'success': True,
-            'ticker': ticker,
-            'data': price_data
-        })
-    else:
-        return jsonify({
-            'success': False,
-            'ticker': ticker,
-            'error': 'Failed to fetch stock price'
-        }), 404
+        use_cache = request.args.get('cache', 'true').lower() == 'true'
+
+        price_data = StockPriceFetcher.get_current_price(ticker, use_cache=use_cache)
+
+        if price_data:
+            log_api_call(logger, '/stock-price/<ticker>', 'GET', {'ticker': ticker}, response_code=200)
+            return jsonify({
+                'success': True,
+                'ticker': ticker,
+                'data': price_data
+            })
+        else:
+            raise NotFoundError(f"株価データを取得できませんでした: {ticker}")
+
+    except (ValidationError, NotFoundError):
+        raise
+    except Exception as e:
+        logger.error(f"株価取得エラー ({ticker}): {str(e)}")
+        raise ExternalAPIError(f"株価の取得中にエラーが発生しました: {str(e)}")
 
 
 @bp.route('/stock-price/update-all', methods=['POST'])
 def update_all_stock_prices():
     """Update stock prices for all holdings"""
-    results = StockPriceFetcher.update_all_holdings_prices()
+    try:
+        log_api_call(logger, '/stock-price/update-all', 'POST')
 
-    return jsonify({
-        'success': True,
-        'results': results
-    })
+        results = StockPriceFetcher.update_all_holdings_prices()
+
+        log_api_call(logger, '/stock-price/update-all', 'POST', response_code=200)
+        logger.info(f"株価一括更新完了: 成功={results['success']}, 失敗={results['failed']}")
+
+        return jsonify({
+            'success': True,
+            'results': results
+        })
+
+    except Exception as e:
+        logger.error(f"株価一括更新エラー: {str(e)}")
+        raise ExternalAPIError(f"株価の一括更新中にエラーが発生しました: {str(e)}")
 
 
 @bp.route('/exchange-rate/multiple', methods=['GET'])
@@ -79,30 +104,40 @@ def get_exchange_rate(from_currency):
 @bp.route('/exchange-rate/convert', methods=['POST'])
 def convert_currency():
     """Convert amount from one currency to another"""
-    data = request.get_json()
+    try:
+        log_api_call(logger, '/exchange-rate/convert', 'POST')
 
-    amount = data.get('amount')
-    from_currency = data.get('from')
-    to_currency = data.get('to', 'JPY')
+        data = request.get_json()
 
-    if not amount or not from_currency:
-        return jsonify({
-            'success': False,
-            'error': 'Missing required parameters: amount, from'
-        }), 400
+        if not data:
+            raise ValidationError("リクエストボディが空です")
 
-    result = ExchangeRateFetcher.convert_amount(amount, from_currency, to_currency)
+        # 必須フィールドのバリデーション
+        validate_required_fields(data, ['amount', 'from'])
 
-    if result:
-        return jsonify({
-            'success': True,
-            'data': result
-        })
-    else:
-        return jsonify({
-            'success': False,
-            'error': 'Failed to convert currency'
-        }), 500
+        amount = data.get('amount')
+        from_currency = data.get('from')
+        to_currency = data.get('to', 'JPY')
+
+        # 金額のバリデーション
+        validate_positive_number(amount, '金額')
+
+        result = ExchangeRateFetcher.convert_amount(amount, from_currency, to_currency)
+
+        if result:
+            log_api_call(logger, '/exchange-rate/convert', 'POST', response_code=200)
+            return jsonify({
+                'success': True,
+                'data': result
+            })
+        else:
+            raise ExternalAPIError(f"通貨変換に失敗しました: {from_currency} → {to_currency}")
+
+    except (ValidationError, ExternalAPIError):
+        raise
+    except Exception as e:
+        logger.error(f"通貨変換エラー: {str(e)}")
+        raise ExternalAPIError(f"通貨変換中にエラーが発生しました: {str(e)}")
 
 
 @bp.route('/dividends/<ticker>', methods=['GET'])
@@ -174,40 +209,54 @@ def get_dividend_summary():
 
     # Aggregate dividend data
     dividend_summary = []
-    total_all_dividends = Decimal('0')
-    yearly_totals = defaultdict(lambda: Decimal('0'))
+    total_all_dividends_jpy = Decimal('0')
+    yearly_totals_jpy = defaultdict(lambda: Decimal('0'))
+
+    # Get all required exchange rates for dividends
+    div_currencies = set(d.currency for d in dividends if d.currency and d.currency not in ['JPY', '日本円'])
+    div_rates = ExchangeRateFetcher.get_multiple_rates(list(div_currencies)) if div_currencies else {}
+
+    def div_to_jpy(amount, currency):
+        if not amount or not currency: return Decimal('0')
+        curr = str(currency).strip().upper()
+        if curr in ['JPY', '日本円']: return Decimal(str(amount))
+        rate_entry = div_rates.get(curr)
+        if rate_entry:
+            rate = rate_entry.get('rate')
+            if rate: return Decimal(str(amount)) * Decimal(str(rate))
+        return Decimal(str(amount))
 
     for ticker_symbol, divs in ticker_dividends.items():
         if ticker_symbol not in ticker_info:
             continue
 
-        total_dividends = Decimal('0')
-        yearly_dividends = defaultdict(lambda: Decimal('0'))
+        total_dividends_ticker_jpy = Decimal('0')
+        yearly_dividends_ticker_jpy = defaultdict(lambda: Decimal('0'))
 
         for div in divs:
-            div_amount = Decimal(str(div.total_dividend)) if div.total_dividend else Decimal('0')
-            total_dividends += div_amount
+            div_jpy = div_to_jpy(div.total_dividend, div.currency)
+            total_dividends_ticker_jpy += div_jpy
 
-            # Group by year (2022 and earlier combined as "2022年以前")
+            # Group by year
             year = div.ex_dividend_date.year
             if year <= 2022:
-                yearly_dividends['2022年以前'] += div_amount
+                yearly_dividends_ticker_jpy['2022年以前'] += div_jpy
             else:
-                yearly_dividends[year] += div_amount
+                yearly_dividends_ticker_jpy[year] += div_jpy
 
-        # Calculate dividend yield
+        # Calculate dividend yield (JPY / JPY)
         total_investment = ticker_info[ticker_symbol]['total_investment']
-        dividend_yield = (total_dividends / total_investment * 100) if total_investment > 0 else Decimal('0')
+        dividend_yield = (total_dividends_ticker_jpy / total_investment * 100) if total_investment > 0 else Decimal('0')
 
         # Add to totals
-        total_all_dividends += total_dividends
-        for year, amount in yearly_dividends.items():
-            yearly_totals[year] += amount
+        total_all_dividends_jpy += total_dividends_ticker_jpy
+        for year, amount in yearly_dividends_ticker_jpy.items():
+            yearly_totals_jpy[year] += amount
 
         # Sort years: numeric years descending, then "2022年以前" at the end
         sorted_years = []
         pre_2022_amount = None
-        for year, amount in yearly_dividends.items():
+        for year, amount in yearly_dividends_ticker_jpy.items():
             if year == '2022年以前':
                 pre_2022_amount = ('2022年以前', amount)
             else:
@@ -220,7 +269,7 @@ def get_dividend_summary():
         dividend_summary.append({
             'ticker_symbol': ticker_symbol,
             'security_name': ticker_info[ticker_symbol]['security_name'],
-            'total_dividends': float(total_dividends),
+            'total_dividends': float(total_dividends_ticker_jpy),
             'total_investment': float(total_investment),
             'dividend_yield': float(dividend_yield),
             'yearly_dividends': {str(year): float(amount) for year, amount in sorted_years}
@@ -234,12 +283,12 @@ def get_dividend_summary():
         ticker_info[ticker]['total_investment']
         for ticker in ticker_info.keys()
     )
-    overall_dividend_yield = (total_all_dividends / total_investment_all * 100) if total_investment_all > 0 else Decimal('0')
+    overall_dividend_yield = (total_all_dividends_jpy / total_investment_all * 100) if total_investment_all > 0 else Decimal('0')
 
     # Sort yearly totals: numeric years descending, then "2022年以前" at the end
     sorted_yearly_totals = []
     pre_2022_total = None
-    for year, amount in yearly_totals.items():
+    for year, amount in yearly_totals_jpy.items():
         if year == '2022年以前':
             pre_2022_total = ('2022年以前', amount)
         else:
@@ -253,7 +302,7 @@ def get_dividend_summary():
         'success': True,
         'dividends': dividend_summary,
         'totals': {
-            'total_dividends': float(total_all_dividends),
+            'total_dividends': float(total_all_dividends_jpy),
             'total_investment': float(total_investment_all),
             'dividend_yield': float(overall_dividend_yield),
             'yearly_totals': {str(year): float(amount) for year, amount in sorted_yearly_totals}
@@ -276,18 +325,25 @@ def get_holdings():
 @bp.route('/holdings/<ticker>', methods=['GET'])
 def get_holding(ticker):
     """Get specific holding details"""
-    holding = Holding.query.filter_by(ticker_symbol=ticker).first()
+    try:
+        log_api_call(logger, '/holdings/<ticker>', 'GET', {'ticker': ticker})
 
-    if not holding:
+        holding = Holding.query.filter_by(ticker_symbol=ticker).first()
+
+        if not holding:
+            raise NotFoundError(f'保有銘柄が見つかりません: {ticker}')
+
+        log_api_call(logger, '/holdings/<ticker>', 'GET', response_code=200)
         return jsonify({
-            'success': False,
-            'error': f'Holding not found: {ticker}'
-        }), 404
+            'success': True,
+            'holding': holding.to_dict()
+        })
 
-    return jsonify({
-        'success': True,
-        'holding': holding.to_dict()
-    })
+    except NotFoundError:
+        raise
+    except Exception as e:
+        logger.error(f"保有銘柄取得エラー ({ticker}): {str(e)}")
+        raise DatabaseError(f'保有銘柄の取得に失敗しました: {str(e)}')
 
 
 @bp.route('/holdings/<ticker>', methods=['DELETE'])
@@ -369,6 +425,108 @@ def get_transactions():
         'transactions': [t.to_dict() for t in transactions]
     })
 
+
+@bp.route('/transactions/<int:transaction_id>', methods=['GET'])
+def get_transaction(transaction_id):
+    """Get a single transaction by ID"""
+    transaction = Transaction.query.get(transaction_id)
+
+    if not transaction:
+        return jsonify({
+            'success': False,
+            'error': '取引が見つかりません'
+        }), 404
+
+    return jsonify({
+        'success': True,
+        'transaction': transaction.to_dict()
+    })
+
+@bp.route('/transactions/<int:transaction_id>', methods=['PUT'])
+def update_transaction(transaction_id):
+    """Update a transaction"""
+    from app import db
+    from app.services import TransactionService
+
+    try:
+        log_api_call(logger, f'/transactions/{transaction_id}', 'PUT')
+
+        transaction = Transaction.query.get(transaction_id)
+
+        if not transaction:
+            raise NotFoundError(f'取引が見つかりません (ID: {transaction_id})')
+
+        data = request.get_json()
+
+        if not data:
+            raise ValidationError("更新データが指定されていません")
+
+        # 更新前のティッカーを保存（再計算用）
+        old_ticker = transaction.ticker_symbol
+
+        # 更新可能なフィールド
+        if 'transaction_date' in data:
+            transaction.transaction_date = validate_date_format(data['transaction_date'], '取引日')
+
+        if 'ticker_symbol' in data:
+            if not data['ticker_symbol']:
+                raise ValidationError("ティッカーシンボルは必須です")
+            transaction.ticker_symbol = data['ticker_symbol']
+
+        if 'security_name' in data:
+            transaction.security_name = data['security_name']
+
+        if 'transaction_type' in data:
+            from app.utils.errors import validate_transaction_type
+            validate_transaction_type(data['transaction_type'])
+            transaction.transaction_type = data['transaction_type']
+
+        if 'quantity' in data:
+            validate_positive_number(data['quantity'], '数量')
+            transaction.quantity = float(data['quantity'])
+
+        if 'unit_price' in data:
+            validate_positive_number(data['unit_price'], '単価')
+            transaction.unit_price = float(data['unit_price'])
+
+        if 'commission' in data:
+            if data['commission'] < 0:
+                raise ValidationError("手数料は0以上である必要があります")
+            transaction.commission = float(data['commission'])
+
+        if 'settlement_amount' in data:
+            validate_positive_number(data['settlement_amount'], '受渡金額')
+            transaction.settlement_amount = float(data['settlement_amount'])
+
+        if 'currency' in data:
+            from app.utils.errors import validate_currency
+            validate_currency(data['currency'])
+            transaction.currency = data['currency']
+
+        db.session.commit()
+        logger.info(f"取引更新完了 (ID: {transaction_id})")
+
+        # 影響を受けた銘柄の再計算
+        affected_tickers = {old_ticker, transaction.ticker_symbol}
+        for ticker in affected_tickers:
+            TransactionService.recalculate_holding(ticker)
+
+        log_api_call(logger, f'/transactions/{transaction_id}', 'PUT', response_code=200)
+
+        return jsonify({
+            'success': True,
+            'message': '取引を更新しました',
+            'transaction': transaction.to_dict(),
+            'affected_tickers': list(affected_tickers)
+        })
+
+    except (ValidationError, NotFoundError):
+        db.session.rollback()
+        raise
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"取引更新エラー (ID: {transaction_id}): {str(e)}")
+        raise DatabaseError(f'取引の更新に失敗しました: {str(e)}')
 
 @bp.route('/transactions/delete', methods=['POST'])
 def delete_transactions():
@@ -514,7 +672,7 @@ def get_realized_pnl():
                         total_sell_qty += qty
 
             avg_exchange_rate = total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 0.1
-
+            
             # total_cost_from_records is in JPY, convert to KRW
             total_cost_krw = total_cost_from_records / avg_exchange_rate
 
@@ -567,40 +725,85 @@ def get_realized_pnl():
 
 @bp.route('/dashboard/summary', methods=['GET'])
 def get_dashboard_summary():
-    """Get dashboard summary data"""
+    """Get dashboard summary data with detailed breakdown"""
     from sqlalchemy import func
 
-    # Get all holdings
-    holdings = Holding.query.all()
-
-    # Calculate totals
-    total_cost = sum(float(h.total_cost or 0) for h in holdings)
-    total_value = sum(float(h.current_value or 0) for h in holdings)
-    unrealized_pnl = sum(float(h.unrealized_pnl or 0) for h in holdings)
-
-    # Get realized P&L
-    realized_pnl_records = RealizedPnl.query.all()
-    realized_pnl = sum(float(r.realized_pnl or 0) for r in realized_pnl_records)
-
-    # Get total dividends
+    # Get data
+    holdings = Holding.query.filter(Holding.total_quantity > 0).all()
+    realized_records = RealizedPnl.query.all()
     dividends = Dividend.query.all()
-    total_dividends = sum(float(d.total_dividend or 0) for d in dividends)
+    
+    # Get required exchange rates for market value
+    currencies = set(h.currency for h in holdings if h.currency and h.currency not in ['JPY', '日本円'])
+    rates = ExchangeRateFetcher.get_multiple_rates(list(currencies)) if currencies else {}
 
-    # Calculate total P&L
-    total_pnl = unrealized_pnl + realized_pnl + total_dividends
-    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0
+    def to_jpy(amount, currency):
+        if not amount or not currency:
+            return 0.0
+        curr = str(currency).strip().upper()
+        if curr in ['JPY', '日本円']:
+            return float(amount)
+        
+        rate_entry = rates.get(curr)
+        if rate_entry:
+            rate = rate_entry.get('rate')
+            if rate:
+                return float(amount) * float(rate)
+        return float(amount)
+
+    # 1. 投資実績銘柄数
+    holding_tickers = {h.ticker_symbol for h in holdings}
+    sold_tickers = {r.ticker_symbol for r in realized_records}
+    total_tickers_count = len(holding_tickers | sold_tickers)
+    active_tickers_count = len(holding_tickers)
+    realized_only_count = len(sold_tickers - holding_tickers)
+
+    # 2. 総投資額
+    holdings_cost_jpy = sum(float(h.total_cost or 0) for h in holdings)
+    realized_cost_jpy = sum(float(r.average_cost or 0) * float(r.quantity or 0) for r in realized_records)
+    total_investment_jpy = holdings_cost_jpy + realized_cost_jpy
+
+    # 3. 総評価額
+    holdings_value_jpy = sum(float(h.current_value or 0) for h in holdings)  # current_value is already in JPY
+    # 売却額 = 確定損益 + 取得コスト (既に JPY)
+    realized_proceeds_jpy = sum(float(r.realized_pnl or 0) + (float(r.average_cost or 0) * float(r.quantity or 0)) for r in realized_records)
+    
+    # 配当の合計 (各レコードを円換算)
+    total_dividends_jpy = 0.0
+    for d in dividends:
+        # total_dividend は現地通貨建ての場合があるため、取引時のレートまたは最新レートで換算が必要
+        # ここでは簡易的に現在のレートを使用（または本来は配当時レートを保持すべきだが、現状のスキーマに合わせて対応）
+        total_dividends_jpy += to_jpy(d.total_dividend, d.currency)
+    
+    total_evaluation_jpy = holdings_value_jpy + realized_proceeds_jpy + total_dividends_jpy
+
+    # 4. 総合損益
+    total_pnl_jpy = total_evaluation_jpy - total_investment_jpy
+    total_pnl_pct = (total_pnl_jpy / total_investment_jpy * 100) if total_investment_jpy > 0 else 0
 
     return jsonify({
         'success': True,
         'summary': {
-            'total_asset_value': total_value,
-            'total_investment': total_cost,
-            'total_pnl': total_pnl,
-            'total_pnl_pct': round(total_pnl_pct, 2),
-            'unrealized_pnl': unrealized_pnl,
-            'realized_pnl': realized_pnl,
-            'dividend_total': total_dividends,
-            'holdings_count': len(holdings),
+            'ticker_counts': {
+                'total': total_tickers_count,
+                'active': active_tickers_count,
+                'realized': realized_only_count
+            },
+            'investment': {
+                'total': total_investment_jpy,
+                'holdings': holdings_cost_jpy,
+                'realized': realized_cost_jpy
+            },
+            'evaluation': {
+                'total': total_evaluation_jpy,
+                'holdings': holdings_value_jpy,
+                'realized': realized_proceeds_jpy,
+                'dividends': total_dividends_jpy
+            },
+            'total_pnl': {
+                'amount': total_pnl_jpy,
+                'percentage': round(total_pnl_pct, 2)
+            },
             'currency': 'JPY'
         }
     })
@@ -610,14 +813,33 @@ def get_dashboard_summary():
 def get_portfolio_composition():
     """Get portfolio composition data for pie chart"""
     holdings = Holding.query.all()
+    
+    # Get required exchange rates for conversion
+    currencies = set(h.currency for h in holdings if h.currency and h.currency not in ['JPY', '日本円'])
+    rates = ExchangeRateFetcher.get_multiple_rates(list(currencies)) if currencies else {}
+
+    def to_jpy(amount, currency):
+        if not amount or not currency:
+            return 0.0
+        curr = str(currency).strip().upper()
+        if curr in ['JPY', '日本円']:
+            return float(amount)
+            
+        rate_entry = rates.get(curr)
+        if rate_entry:
+            rate = rate_entry.get('rate')
+            if rate:
+                return float(amount) * float(rate)
+        return float(amount)
 
     composition_data = []
     for holding in holdings:
-        if holding.current_value and float(holding.current_value) > 0:
+        value_jpy = to_jpy(holding.current_value, holding.currency)
+        if value_jpy > 0:
             composition_data.append({
                 'ticker': holding.ticker_symbol,
                 'name': holding.security_name or holding.ticker_symbol,
-                'value': float(holding.current_value),
+                'value': value_jpy,
                 'percentage': 0  # Will be calculated on frontend
             })
 
@@ -682,3 +904,160 @@ def get_pnl_history():
         'success': True,
         'data': pnl_history
     })
+@bp.route('/performance/history', methods=['GET'])
+def get_performance_history():
+    """Get investment performance history (daily or monthly)"""
+    period = request.args.get('period', '1m') # '1m' for daily, '1y' for monthly
+
+    if period == '1y':
+        data = PerformanceService.get_monthly_performance_history()
+    else:
+        # Default to 30 days daily
+        data = PerformanceService.get_performance_history(days=30)
+
+    return jsonify({
+        'success': True,
+        'period': period,
+        'data': data
+    })
+
+@bp.route('/performance/detail', methods=['GET'])
+def get_performance_detail():
+    """Get detailed breakdown for a specific date"""
+    date = request.args.get('date')
+
+    if not date:
+        return jsonify({
+            'success': False,
+            'error': 'Date parameter is required'
+        }), 400
+
+    try:
+        details = PerformanceService.get_daily_detail(date)
+
+        return jsonify({
+            'success': True,
+            'date': date,
+            'details': details
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+@bp.route('/dashboard/yearly-stats', methods=['GET'])
+def get_yearly_stats():
+    """Get yearly investment performance stats"""
+    from collections import defaultdict
+    
+    # Yearly Realized PnL stats from RealizedPnl records
+    realized_records = RealizedPnl.query.all()
+    
+    stats = defaultdict(lambda: {
+        'total_cost': 0.0,
+        'total_proceeds': 0.0,
+        'realized_pnl': 0.0
+    })
+    
+    for r in realized_records:
+        if not r.sell_date:
+            continue
+            
+        year = r.sell_date.year
+        cost = float(r.average_cost or 0) * float(r.quantity or 0)
+        pnl = float(r.realized_pnl or 0)
+        proceeds = cost + pnl
+        
+        stats[year]['total_cost'] += cost
+        stats[year]['total_proceeds'] += proceeds
+        stats[year]['realized_pnl'] += pnl
+        
+    years = sorted(stats.keys(), reverse=True)
+    
+    response_data = []
+    total_all = {
+        'year': '合計',
+        'total_cost': 0.0,
+        'total_proceeds': 0.0,
+        'realized_pnl': 0.0,
+        'pnl_pct': 0.0
+    }
+    
+    for year in years:
+        s = stats[year]
+        pnl_pct = (s['realized_pnl'] / s['total_cost'] * 100) if s['total_cost'] > 0 else 0
+        
+        item = {
+            'year': str(year),
+            'total_cost': s['total_cost'],
+            'total_proceeds': s['total_proceeds'],
+            'realized_pnl': s['realized_pnl'],
+            'pnl_pct': round(pnl_pct, 2)
+        }
+        response_data.append(item)
+        
+        total_all['total_cost'] += s['total_cost']
+        total_all['total_proceeds'] += s['total_proceeds']
+        total_all['realized_pnl'] += s['realized_pnl']
+
+    if total_all['total_cost'] > 0:
+        total_all['pnl_pct'] = round((total_all['realized_pnl'] / total_all['total_cost'] * 100), 2)
+    
+    return jsonify({
+        'success': True,
+        'yearly_stats': response_data,
+        'total': total_all
+    })
+
+
+@bp.route('/holdings/metrics', methods=['GET'])
+def get_holdings_metrics():
+    """全保有銘柄の評価指標を取得"""
+    try:
+        log_api_call(logger, '/holdings/metrics', 'GET')
+
+        holdings = Holding.query.all()
+        ticker_symbols = [h.ticker_symbol for h in holdings]
+
+        if not ticker_symbols:
+            return jsonify({
+                'success': True,
+                'count': 0,
+                'metrics': []
+            })
+
+        metrics_dict = StockMetricsFetcher.get_multiple_metrics(ticker_symbols, use_cache=True)
+
+        log_api_call(logger, '/holdings/metrics', 'GET', response_code=200)
+        logger.info(f"評価指標取得完了: {len(metrics_dict)}/{len(ticker_symbols)}件")
+
+        return jsonify({
+            'success': True,
+            'count': len(metrics_dict),
+            'metrics': list(metrics_dict.values())
+        })
+
+    except Exception as e:
+        logger.error(f"評価指標取得エラー: {str(e)}")
+        raise ExternalAPIError(f"評価指標の取得中にエラーが発生しました: {str(e)}")
+
+
+@bp.route('/stock-metrics/update-all', methods=['POST'])
+def update_all_stock_metrics():
+    """全保有銘柄の評価指標を更新"""
+    try:
+        log_api_call(logger, '/stock-metrics/update-all', 'POST')
+
+        results = StockMetricsFetcher.update_all_holdings_metrics()
+
+        log_api_call(logger, '/stock-metrics/update-all', 'POST', response_code=200)
+        logger.info(f"評価指標一括更新完了: 成功={results['success']}, 失敗={results['failed']}")
+
+        return jsonify({
+            'success': True,
+            'results': results
+        })
+
+    except Exception as e:
+        logger.error(f"評価指標一括更新エラー: {str(e)}")
+        raise ExternalAPIError(f"評価指標の一括更新中にエラーが発生しました: {str(e)}")

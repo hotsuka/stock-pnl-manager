@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+
+{% block title %}損益推移 - Stock PnL Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>損益推移</h2>
+        <div class="d-flex gap-2">
+            <div class="btn-group" role="group" aria-label="表示期間の切替">
+                <button type="button" class="btn btn-outline-primary active" id="btn-1m" onclick="changePeriod('1m')">過去1か月
+                    (日次)</button>
+                <button type="button" class="btn btn-outline-primary" id="btn-1y" onclick="changePeriod('1y')">過去1年
+                    (月次)</button>
+            </div>
+            <button type="button" class="btn btn-outline-secondary" onclick="refreshData()" id="btn-refresh" title="データを最新に更新">
+                <i class="bi bi-arrow-clockwise"></i> 更新
+            </button>
+        </div>
+    </div>
+
+    <!-- グラフセクション -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div id="performance-chart" style="height: 500px; width: 100%;">
+                <div class="text-center p-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">データを計算中... (過去の株価取得に時間がかかる場合があります)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- テーブルセクション -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">損益詳細</h5>
+            <button class="btn btn-sm btn-outline-secondary" onclick="exportToCSV()">CSVダウンロード</button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="performance-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>日付</th>
+                            <th class="text-end">合計</th>
+                            <th class="text-end">A. 保有損益</th>
+                            <th class="text-end">B. 実現損益</th>
+                            <th class="text-end">C. 受取配当</th>
+                        </tr>
+                    </thead>
+                    <tbody id="performance-tbody">
+                        <!-- JS で生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 詳細モーダル -->
+    <div class="modal fade" id="detailModal" tabindex="-1" aria-labelledby="detailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailModalLabel">損益詳細</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="detailContent">
+                        <div class="text-center p-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .year-column {
+        background-color: #f8f9fa;
+    }
+
+    #performance-chart {
+        min-height: 400px;
+    }
+
+    .text-positive {
+        color: #28a745;
+    }
+
+    .text-negative {
+        color: #dc3545;
+    }
+
+    .clickable-cell {
+        cursor: pointer;
+        text-decoration: underline;
+        text-decoration-style: dotted;
+    }
+
+    .clickable-cell:hover {
+        background-color: #f8f9fa;
+    }
+
+    .detail-section {
+        margin-bottom: 30px;
+    }
+
+    .detail-section h6 {
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+    }
+</style>
+
+<!-- Plotly.js -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<script>
+    let currentPeriod = '1m';
+    let performanceData = [];
+    let detailCache = {}; // 詳細データのキャッシュ
+    const CACHE_EXPIRY = 5 * 60 * 1000; // 5分間
+
+    document.addEventListener('DOMContentLoaded', function () {
+        loadData('1m');
+    });
+
+    /**
+     * キャッシュからデータを取得
+     */
+    function getCachedData(period) {
+        const cacheKey = `performance_${period}`;
+        const cached = sessionStorage.getItem(cacheKey);
+        if (!cached) return null;
+
+        try {
+            const data = JSON.parse(cached);
+            const now = Date.now();
+            // キャッシュの有効期限をチェック
+            if (now - data.timestamp < CACHE_EXPIRY) {
+                console.log(`Using cached data for period: ${period}`);
+                return data.data;
+            } else {
+                sessionStorage.removeItem(cacheKey);
+                return null;
+            }
+        } catch (e) {
+            console.error('Cache parse error:', e);
+            sessionStorage.removeItem(cacheKey);
+            return null;
+        }
+    }
+
+    /**
+     * データをキャッシュに保存
+     */
+    function setCachedData(period, data) {
+        const cacheKey = `performance_${period}`;
+        const cacheData = {
+            timestamp: Date.now(),
+            data: data
+        };
+        try {
+            sessionStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        } catch (e) {
+            console.warn('Failed to cache data:', e);
+        }
+    }
+
+    /**
+     * データを読み込む（キャッシュ優先）
+     */
+    async function loadData(period, forceRefresh = false) {
+        currentPeriod = period;
+
+        // ボタンの状態を更新
+        document.getElementById('btn-1m').classList.toggle('active', period === '1m');
+        document.getElementById('btn-1y').classList.toggle('active', period === '1y');
+
+        // キャッシュをチェック（強制更新でない場合）
+        if (!forceRefresh) {
+            const cached = getCachedData(period);
+            if (cached) {
+                performanceData = cached;
+                renderChart();
+                renderTable();
+                showCacheIndicator();
+                return;
+            }
+        }
+
+        // ローディング表示
+        document.getElementById('performance-tbody').innerHTML = '<tr><td colspan="5" class="text-center">データを読み込み中...</td></tr>';
+
+        try {
+            const response = await fetch(`/api/performance/history?period=${period}`);
+            const result = await response.json();
+
+            if (result.success) {
+                performanceData = result.data;
+                // キャッシュに保存
+                setCachedData(period, performanceData);
+                renderChart();
+                renderTable();
+                hideCacheIndicator();
+            } else {
+                showError('データの取得に失敗しました');
+            }
+        } catch (error) {
+            console.error('Error fetching performance data:', error);
+            showError('通信エラーが発生しました');
+        }
+    }
+
+    function changePeriod(period) {
+        if (currentPeriod === period) return;
+        loadData(period);
+    }
+
+    /**
+     * データを強制的に再読み込み
+     */
+    function refreshData() {
+        const btn = document.getElementById('btn-refresh');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>更新中...';
+
+        // キャッシュをクリア
+        sessionStorage.removeItem(`performance_${currentPeriod}`);
+        detailCache = {}; // 詳細キャッシュもクリア
+
+        loadData(currentPeriod, true).finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 更新';
+        });
+    }
+
+    /**
+     * キャッシュ使用中インジケーターを表示
+     */
+    function showCacheIndicator() {
+        const chartDiv = document.getElementById('performance-chart');
+        let indicator = document.getElementById('cache-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'cache-indicator';
+            indicator.className = 'alert alert-info alert-dismissible fade show position-absolute top-0 end-0 m-2';
+            indicator.style.zIndex = '1000';
+            indicator.innerHTML = `
+                <small>
+                    <i class="bi bi-clock-history"></i> キャッシュデータを表示中（最新データは「更新」ボタンをクリック）
+                </small>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            chartDiv.style.position = 'relative';
+            chartDiv.appendChild(indicator);
+        }
+    }
+
+    /**
+     * キャッシュインジケーターを非表示
+     */
+    function hideCacheIndicator() {
+        const indicator = document.getElementById('cache-indicator');
+        if (indicator) {
+            indicator.remove();
+        }
+    }
+
+    function renderChart() {
+        const dates = performanceData.map(d => d.date);
+        const holding = performanceData.map(d => d.holding_pnl);
+        const realized = performanceData.map(d => d.realized_pnl);
+        const dividend = performanceData.map(d => d.dividend_income);
+
+        const trace1 = {
+            x: dates,
+            y: holding,
+            name: 'A. 保有損益',
+            type: 'bar',
+            marker: { color: '#4a90e2' }
+        };
+
+        const trace2 = {
+            x: dates,
+            y: realized,
+            name: 'B. 実現損益',
+            type: 'bar',
+            marker: { color: '#f39c12' }
+        };
+
+        const trace3 = {
+            x: dates,
+            y: dividend,
+            name: 'C. 受取配当',
+            type: 'bar',
+            marker: { color: '#27ae60' }
+        };
+
+        const layout = {
+            barmode: 'relative', // 正負両方の積み上げに対応
+            title: currentPeriod === '1m' ? '日次損益推移 (過去30日)' : '月次損益推移 (過去1年)',
+            xaxis: {
+                title: '日付',
+                tickangle: -45,
+                type: 'category'
+            },
+            yaxis: {
+                title: '損益額 (JPY)',
+                zeroline: true,
+                zerolinecolor: '#999',
+                zerolinewidth: 2
+            },
+            margin: { b: 100, l: 80, r: 20, t: 40 },
+            legend: { orientation: 'h', y: -0.2 },
+            hovermode: 'closest'
+        };
+
+        const config = { responsive: true };
+
+        Plotly.newPlot('performance-chart', [trace1, trace2, trace3], layout, config);
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('performance-tbody');
+        if (performanceData.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center">データがありません</td></tr>';
+            return;
+        }
+
+        // 最新の日付を上に表示
+        const sortedData = [...performanceData].reverse();
+
+        tbody.innerHTML = sortedData.map(d => {
+            const totalClass = d.total >= 0 ? 'text-positive' : 'text-negative';
+            const hClass = d.holding_pnl >= 0 ? 'text-positive' : 'text-negative';
+            const rClass = d.realized_pnl >= 0 ? 'text-positive' : 'text-negative';
+
+            return `
+                <tr>
+                    <td>${d.date}</td>
+                    <td class="text-end fw-bold ${totalClass}">${formatCurrency(d.total)}</td>
+                    <td class="text-end ${hClass} clickable-cell" onclick="showDetail('${d.date}', 'holding')">${formatCurrency(d.holding_pnl)}</td>
+                    <td class="text-end ${rClass} clickable-cell" onclick="showDetail('${d.date}', 'realized')">${formatCurrency(d.realized_pnl)}</td>
+                    <td class="text-end text-positive clickable-cell" onclick="showDetail('${d.date}', 'dividend')">${formatCurrency(d.dividend_income)}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function formatCurrency(value) {
+        return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(value);
+    }
+
+    async function showDetail(date, type) {
+        // モーダルを表示
+        const modal = new bootstrap.Modal(document.getElementById('detailModal'));
+        const modalTitle = document.getElementById('detailModalLabel');
+        const detailContent = document.getElementById('detailContent');
+
+        // タイトルを設定
+        const typeNames = {
+            'holding': 'A. 保有損益',
+            'realized': 'B. 実現損益',
+            'dividend': 'C. 受取配当'
+        };
+        modalTitle.textContent = `${date} - ${typeNames[type]} の詳細`;
+
+        // キャッシュをチェック
+        const cacheKey = `${date}_${type}`;
+        if (detailCache[cacheKey]) {
+            console.log(`Using cached detail for ${cacheKey}`);
+            detailContent.innerHTML = detailCache[cacheKey];
+            modal.show();
+            return;
+        }
+
+        // ローディング表示
+        detailContent.innerHTML = `
+            <div class="text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">詳細データを読み込み中...</p>
+            </div>
+        `;
+
+        modal.show();
+
+        try {
+            // キャッシュをチェック（日付レベル）
+            let details;
+            if (!detailCache[date]) {
+                // APIから詳細データを取得
+                const response = await fetch(`/api/performance/detail?date=${date}`);
+                const result = await response.json();
+
+                if (!result.success) {
+                    detailContent.innerHTML = `<div class="alert alert-danger">データの取得に失敗しました: ${result.error}</div>`;
+                    return;
+                }
+
+                // 日付レベルでキャッシュ
+                detailCache[date] = result.details;
+                details = result.details;
+            } else {
+                console.log(`Using cached API data for ${date}`);
+                details = detailCache[date];
+            }
+
+            // タイプ別にHTMLを生成
+            let html = '';
+            if (type === 'holding') {
+                html = renderHoldingDetails(details.holding_details);
+            } else if (type === 'realized') {
+                html = renderRealizedDetails(details.realized_details);
+            } else if (type === 'dividend') {
+                html = renderDividendDetails(details.dividend_details);
+            }
+
+            // HTML生成結果もキャッシュ
+            detailCache[cacheKey] = html;
+            detailContent.innerHTML = html;
+
+        } catch (error) {
+            console.error('Error fetching detail:', error);
+            detailContent.innerHTML = `<div class="alert alert-danger">通信エラーが発生しました</div>`;
+        }
+    }
+
+    function renderHoldingDetails(details) {
+        if (details.length === 0) {
+            return '<div class="alert alert-info">この日の保有損益はありません</div>';
+        }
+
+        const total = details.reduce((sum, d) => sum + d.pnl, 0);
+
+        let html = `
+            <div class="detail-section">
+                <h6>保有損益の内訳 (合計: ${formatCurrency(total)})</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ティッカー</th>
+                                <th>銘柄名</th>
+                                <th class="text-end">保有数量</th>
+                                <th class="text-end">前日株価</th>
+                                <th class="text-end">当日株価</th>
+                                <th class="text-end">株価変動</th>
+                                <th class="text-end">為替レート</th>
+                                <th class="text-end">損益</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        details.forEach(d => {
+            const pnlClass = d.pnl >= 0 ? 'text-positive' : 'text-negative';
+            const changeClass = d.price_change >= 0 ? 'text-positive' : 'text-negative';
+            const exchangeRate = d.currency === 'JPY' ? '-' : d.exchange_rate.toFixed(2);
+
+            html += `
+                <tr>
+                    <td><strong>${d.ticker_symbol}</strong></td>
+                    <td>${d.security_name}</td>
+                    <td class="text-end">${d.quantity.toLocaleString('ja-JP', {maximumFractionDigits: 2})}</td>
+                    <td class="text-end">${d.prev_price.toLocaleString('ja-JP', {maximumFractionDigits: 2})} ${d.currency}</td>
+                    <td class="text-end">${d.curr_price.toLocaleString('ja-JP', {maximumFractionDigits: 2})} ${d.currency}</td>
+                    <td class="text-end ${changeClass}">${d.price_change >= 0 ? '+' : ''}${d.price_change.toLocaleString('ja-JP', {maximumFractionDigits: 2})} ${d.currency}</td>
+                    <td class="text-end">${exchangeRate}</td>
+                    <td class="text-end fw-bold ${pnlClass}">${formatCurrency(d.pnl)}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        return html;
+    }
+
+    function renderRealizedDetails(details) {
+        if (details.length === 0) {
+            return '<div class="alert alert-info">この日の実現損益はありません</div>';
+        }
+
+        const total = details.reduce((sum, d) => sum + d.pnl, 0);
+
+        let html = `
+            <div class="detail-section">
+                <h6>実現損益の内訳 (合計: ${formatCurrency(total)})</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ティッカー</th>
+                                <th>銘柄名</th>
+                                <th class="text-end">売却数量</th>
+                                <th class="text-end">平均取得単価</th>
+                                <th class="text-end">売却単価</th>
+                                <th class="text-end">実現損益</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        details.forEach(d => {
+            const pnlClass = d.pnl >= 0 ? 'text-positive' : 'text-negative';
+
+            html += `
+                <tr>
+                    <td><strong>${d.ticker_symbol}</strong></td>
+                    <td>${d.security_name}</td>
+                    <td class="text-end">${d.quantity.toLocaleString('ja-JP', {maximumFractionDigits: 2})}</td>
+                    <td class="text-end">${d.average_cost.toLocaleString('ja-JP', {maximumFractionDigits: 2})}</td>
+                    <td class="text-end">${d.sell_price.toLocaleString('ja-JP', {maximumFractionDigits: 2})}</td>
+                    <td class="text-end fw-bold ${pnlClass}">${formatCurrency(d.pnl)}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        return html;
+    }
+
+    function renderDividendDetails(details) {
+        if (details.length === 0) {
+            return '<div class="alert alert-info">この日の配当受取はありません</div>';
+        }
+
+        const total = details.reduce((sum, d) => sum + d.total_dividend, 0);
+
+        let html = `
+            <div class="detail-section">
+                <h6>配当受取の内訳 (合計: ${formatCurrency(total)})</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ティッカー</th>
+                                <th>銘柄名</th>
+                                <th class="text-end">保有数量</th>
+                                <th class="text-end">1株あたり配当</th>
+                                <th class="text-end">為替レート</th>
+                                <th class="text-end">受取配当額</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        details.forEach(d => {
+            const exchangeRate = d.currency === 'JPY' ? '-' : d.exchange_rate.toFixed(2);
+
+            html += `
+                <tr>
+                    <td><strong>${d.ticker_symbol}</strong></td>
+                    <td>${d.security_name}</td>
+                    <td class="text-end">${d.quantity.toLocaleString('ja-JP', {maximumFractionDigits: 2})}</td>
+                    <td class="text-end">${d.dividend_per_share.toLocaleString('ja-JP', {maximumFractionDigits: 4})} ${d.currency}</td>
+                    <td class="text-end">${exchangeRate}</td>
+                    <td class="text-end fw-bold text-positive">${formatCurrency(d.total_dividend)}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        return html;
+    }
+
+    function showError(msg) {
+        document.getElementById('performance-chart').innerHTML = `<div class="alert alert-danger mx-5 mt-5">${msg}</div>`;
+        document.getElementById('performance-tbody').innerHTML = `<tr><td colspan="5" class="text-center text-danger">${msg}</td></tr>`;
+    }
+
+    function exportToCSV() {
+        if (performanceData.length === 0) return;
+
+        let csv = '日付,合計,A.保有損益,B.実現損益,C.受取配当\n';
+        performanceData.forEach(d => {
+            csv += `${d.date},${d.total},${d.holding_pnl},${d.realized_pnl},${d.dividend_income}\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `performance_history_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+{% endblock %}

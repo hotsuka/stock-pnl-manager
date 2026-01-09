@@ -22,6 +22,10 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
 
+    # Setup logging
+    from app.utils.logger import setup_logger
+    setup_logger(app)
+
     # Import models (required for Flask-Migrate)
     with app.app_context():
         from app import models
@@ -41,6 +45,19 @@ def create_app(config_name=None):
     app.register_blueprint(main.bp)
     app.register_blueprint(upload.bp)
     app.register_blueprint(api.bp)
+
+    # Register error handlers
+    from app.utils.errors import (
+        AppError, ValidationError, NotFoundError, DatabaseError,
+        ExternalAPIError, handle_app_error, handle_generic_error
+    )
+
+    app.register_error_handler(AppError, handle_app_error)
+    app.register_error_handler(ValidationError, handle_app_error)
+    app.register_error_handler(NotFoundError, handle_app_error)
+    app.register_error_handler(DatabaseError, handle_app_error)
+    app.register_error_handler(ExternalAPIError, handle_app_error)
+    app.register_error_handler(Exception, handle_generic_error)
 
     # Add a simple index route
     @app.route('/')

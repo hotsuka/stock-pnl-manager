@@ -1,20 +1,24 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Stock P&L Manager{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
     <style>
         body {
             padding-top: 60px;
         }
+
         .container {
             max-width: 1200px;
         }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
+
 <body>
     <!-- ナビゲーションバー -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
@@ -26,22 +30,32 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/dashboard' or request.path == '/' %}active{% endif %}" href="/dashboard">ダッシュボード</a>
+                        <a class="nav-link {% if request.path == '/dashboard' or request.path == '/' %}active{% endif %}"
+                            href="/dashboard">ダッシュボード</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/holdings' %}active{% endif %}" href="/holdings">保有銘柄一覧</a>
+                        <a class="nav-link {% if request.path == '/holdings' %}active{% endif %}"
+                            href="/holdings">保有銘柄一覧</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/realized-pnl' %}active{% endif %}" href="/realized-pnl">売却済み銘柄一覧</a>
+                        <a class="nav-link {% if request.path == '/realized-pnl' %}active{% endif %}"
+                            href="/realized-pnl">売却済み銘柄一覧</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/dividends' %}active{% endif %}" href="/dividends">配当受取一覧</a>
+                        <a class="nav-link {% if request.path == '/dividends' %}active{% endif %}"
+                            href="/dividends">配当受取一覧</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/transactions' %}active{% endif %}" href="/transactions">取引履歴</a>
+                        <a class="nav-link {% if request.path == '/performance' %}active{% endif %}"
+                            href="/performance">損益推移</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/upload' %}active{% endif %}" href="/upload">CSV取り込み</a>
+                        <a class="nav-link {% if request.path == '/transactions' %}active{% endif %}"
+                            href="/transactions">取引履歴</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path == '/upload' %}active{% endif %}"
+                            href="/upload">CSV取り込み</a>
                     </li>
                 </ul>
             </div>
@@ -56,4 +70,5 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     {% block extra_js %}{% endblock %}
 </body>
+
 </html>

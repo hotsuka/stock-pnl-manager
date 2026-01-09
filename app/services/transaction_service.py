@@ -4,6 +4,9 @@ from app import db
 from app.models.transaction import Transaction
 from app.models.holding import Holding
 from app.models.realized_pnl import RealizedPnl
+from app.utils.logger import get_logger, log_database_operation
+
+logger = get_logger('transaction_service')
 
 
 class TransactionService:
@@ -13,18 +16,22 @@ class TransactionService:
     def save_transactions(transactions_data):
         """
         取引データを保存
-        
+
         Args:
             transactions_data: 取引データのリスト
-            
+
         Returns:
             dict: 保存結果 {'success': 件数, 'failed': 件数, 'errors': エラーリスト}
         """
+        logger.info(f"取引データ保存開始: {len(transactions_data)}件")
         success_count = 0
         failed_count = 0
         errors = []
 
-        for data in transactions_data:
+        # 日付順にソート（移動平均法の正確な計算のため）
+        sorted_data = sorted(transactions_data, key=lambda x: x.get('transaction_date', ''))
+
+        for data in sorted_data:
             try:
                 # 重複チェック
                 existing = Transaction.query.filter_by(
@@ -35,6 +42,7 @@ class TransactionService:
                 ).first()
 
                 if existing:
+                    logger.warning(f"重複取引をスキップ: {data.get('ticker_symbol')} {data.get('transaction_date')}")
                     errors.append({
                         'data': data,
                         'error': '重複する取引が既に存在します'
@@ -45,21 +53,25 @@ class TransactionService:
                 # トランザクション作成
                 transaction = Transaction(**data)
                 db.session.add(transaction)
-                
+
                 # 保有銘柄を更新
                 TransactionService._update_holding(transaction)
-                
+
                 db.session.commit()
+                log_database_operation(logger, 'INSERT', 'transactions', f"{data.get('ticker_symbol')} - {data.get('transaction_type')}")
                 success_count += 1
 
             except Exception as e:
                 db.session.rollback()
+                logger.error(f"取引保存エラー ({data.get('ticker_symbol')}): {str(e)}")
+                log_database_operation(logger, 'INSERT', 'transactions', error=str(e))
                 errors.append({
                     'data': data,
                     'error': str(e)
                 })
                 failed_count += 1
 
+        logger.info(f"取引データ保存完了: 成功={success_count}, 失敗={failed_count}")
         return {
             'success': success_count,
             'failed': failed_count,
@@ -105,9 +117,11 @@ class TransactionService:
             if holding.total_quantity < transaction.quantity:
                 raise ValueError(f"保有数量が不足しています: {transaction.ticker_symbol}")
 
-            # 確定損益を計算
-            realized_pnl = (transaction.unit_price - holding.average_cost) * transaction.quantity
-            realized_pnl -= transaction.commission if transaction.commission else 0
+            # 確定損益を計算 (JPYベース)
+            # transaction.settlement_amount は常に受渡金額 (JPY)
+            sell_proceeds_jpy = Decimal(str(transaction.settlement_amount or 0))
+            cost_basis_jpy = Decimal(str(holding.average_cost or 0)) * Decimal(str(transaction.quantity or 0))
+            realized_pnl = sell_proceeds_jpy - cost_basis_jpy
             
             realized_pnl_pct = None
             if holding.average_cost > 0:
@@ -201,9 +215,11 @@ class TransactionService:
                     # データ不整合の場合はスキップ
                     continue
 
-                # 確定損益を計算
-                realized_pnl = (transaction.unit_price - current_holding['average_cost']) * transaction.quantity
-                realized_pnl -= transaction.commission if transaction.commission else 0
+                # 確定損益を計算 (JPYベース)
+                # transaction.settlement_amount は常に受渡金額 (JPY)
+                sell_proceeds_jpy = Decimal(str(transaction.settlement_amount or 0))
+                cost_basis_jpy = Decimal(str(current_holding['average_cost'] or 0)) * Decimal(str(transaction.quantity or 0))
+                realized_pnl = sell_proceeds_jpy - cost_basis_jpy
 
                 realized_pnl_pct = None
                 if current_holding['average_cost'] > 0:
@@ -238,3 +254,18 @@ class TransactionService:
             db.session.add(new_holding)
 
         db.session.commit()
+
+    @staticmethod
+    def recalculate_all_holdings():
+        """全銘柄の保有情報を取引履歴から再計算"""
+        from app.models.transaction import Transaction
+        
+        # 取引履歴にある全銘柄を抽出
+        tickers = db.session.query(Transaction.ticker_symbol).distinct().all()
+        ticker_list = [t[0] for t in tickers]
+        
+        print(f"Recalculating {len(ticker_list)} holdings...")
+        for ticker in ticker_list:
+            TransactionService.recalculate_holding(ticker)
+        
+        print("Recalculation complete.")

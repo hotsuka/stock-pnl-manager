@@ -11,8 +11,12 @@ import yfinance as yf
 from datetime import datetime, timedelta
 from app import db
 from app.models.stock_price import StockPrice
+from app.services.exchange_rate_fetcher import ExchangeRateFetcher
 from app.models.holding import Holding
 from sqlalchemy.exc import IntegrityError
+from app.utils.logger import get_logger, log_external_api_call
+
+logger = get_logger('stock_price_fetcher')
 
 # Disable SSL verification to work around Japanese username path issue
 import os
@@ -63,41 +67,64 @@ class StockPriceFetcher:
         try:
             # Add market suffix for Japanese stocks
             yf_ticker = StockPriceFetcher._format_ticker(ticker_symbol)
+            log_external_api_call(logger, 'yfinance', f'get_price/{yf_ticker}', success=True)
+
             stock = yf.Ticker(yf_ticker)
 
             # Get fast info for current price
             try:
                 price = stock.info.get('currentPrice') or stock.info.get('regularMarketPrice')
                 currency = stock.info.get('currency', 'USD')
-            except:
+            except Exception as e:
+                logger.warning(f"Info取得失敗 ({ticker_symbol}), 履歴データにフォールバック: {str(e)}")
                 # Fallback to history if info fails
                 hist = stock.history(period='1d')
                 if hist.empty:
+                    log_external_api_call(logger, 'yfinance', f'get_price/{yf_ticker}', success=False, error='履歴データが空')
                     return None
                 price = float(hist['Close'].iloc[-1])
                 currency = stock.info.get('currency', 'USD') if hasattr(stock, 'info') else 'USD'
 
             if price is None:
+                log_external_api_call(logger, 'yfinance', f'get_price/{yf_ticker}', success=False, error='価格がNull')
                 return None
 
             # Cache the price
             StockPriceFetcher._cache_price(ticker_symbol, price, currency)
 
-            return {
+            # Get previous close
+            previous_close = stock.info.get('previousClose')
+            if previous_close is None:
+                # Try to get from history if info is missing
+                 # We already fetched history if logic fell through, but let's be sure
+                 if 'hist' not in locals() or hist.empty:
+                     hist = stock.history(period='5d') # fetch a bit more to be safe
+
+                 if not hist.empty and len(hist) >= 2:
+                     previous_close = float(hist['Close'].iloc[-2])
+
+            result = {
                 'price': float(price),
                 'currency': currency,
                 'timestamp': datetime.now(),
                 'source': 'yahoo_finance'
             }
 
+            if previous_close:
+                result['previous_close'] = float(previous_close)
+
+            logger.info(f"株価取得成功: {ticker_symbol} = {price} {currency}")
+            return result
+
         except Exception as e:
-            print(f"Error fetching price for {ticker_symbol}: {e}")
+            logger.error(f"株価取得エラー ({ticker_symbol}): {str(e)}")
+            log_external_api_call(logger, 'yfinance', f'get_price/{ticker_symbol}', success=False, error=str(e))
             return None
 
     @staticmethod
     def get_multiple_prices(ticker_symbols, use_cache=True):
         """
-        Get current prices for multiple tickers
+        Get current prices for multiple tickers (optimized batch processing)
 
         Args:
             ticker_symbols: List of ticker symbols
@@ -106,17 +133,85 @@ class StockPriceFetcher:
         Returns:
             dict: {ticker: {'price': float, 'currency': str, ...}}
         """
+        import yfinance as yf
+        from datetime import datetime
+
         results = {}
-        for ticker in ticker_symbols:
-            price_data = StockPriceFetcher.get_current_price(ticker, use_cache)
-            if price_data:
-                results[ticker] = price_data
+        uncached_tickers = []
+
+        # Step 1: キャッシュから取得
+        if use_cache:
+            today = datetime.now().date()
+            for ticker in ticker_symbols:
+                cached = StockPrice.query.filter_by(
+                    ticker_symbol=ticker,
+                    price_date=today
+                ).first()
+
+                if cached:
+                    results[ticker] = {
+                        'price': float(cached.close_price),
+                        'currency': cached.currency,
+                        'timestamp': cached.created_at,
+                        'previous_close': float(cached.open_price) if cached.open_price else None,
+                        'source': 'cache'
+                    }
+                else:
+                    uncached_tickers.append(ticker)
+        else:
+            uncached_tickers = list(ticker_symbols)
+
+        # Step 2: キャッシュにないものをバッチ取得
+        if uncached_tickers:
+            batch_size = 15  # yfinanceの推奨バッチサイズ
+            for i in range(0, len(uncached_tickers), batch_size):
+                batch = uncached_tickers[i:i+batch_size]
+
+                # yfinance形式に変換
+                yf_tickers = [StockPriceFetcher._format_ticker(t) for t in batch]
+
+                try:
+                    # バッチで一括取得
+                    tickers_obj = yf.Tickers(' '.join(yf_tickers))
+
+                    for original_ticker, yf_ticker in zip(batch, yf_tickers):
+                        try:
+                            ticker_data = tickers_obj.tickers[yf_ticker]
+                            info = ticker_data.info
+
+                            price = info.get('currentPrice') or info.get('regularMarketPrice')
+                            currency = info.get('currency', 'USD')
+                            previous_close = info.get('previousClose')
+
+                            if price:
+                                results[original_ticker] = {
+                                    'price': float(price),
+                                    'currency': currency,
+                                    'timestamp': datetime.now(),
+                                    'previous_close': float(previous_close) if previous_close else None,
+                                    'source': 'api'
+                                }
+
+                                # キャッシュに保存
+                                StockPriceFetcher._cache_price(original_ticker, price, currency)
+                        except Exception as e:
+                            print(f"Error fetching {original_ticker}: {e}")
+                            continue
+
+                except Exception as e:
+                    print(f"Batch fetch error: {e}")
+                    # フォールバック: 個別取得
+                    for ticker in batch:
+                        price_data = StockPriceFetcher.get_current_price(ticker, use_cache=False)
+                        if price_data:
+                            results[ticker] = price_data
+
         return results
 
     @staticmethod
     def update_all_holdings_prices():
         """
-        Update current prices for all holdings
+        Update current prices for all holdings (optimized batch processing)
 
         Returns:
             dict: Summary of updates
@@ -128,25 +223,75 @@ class StockPriceFetcher:
             'errors': []
         }
 
-        for holding in holdings:
-            price_data = StockPriceFetcher.get_current_price(holding.ticker_symbol)
+        if not holdings:
+            return results
 
-            if price_data:
-                # Update holding with new price
-                holding.update_current_price(price_data['price'])
-                results['success'] += 1
-            else:
+        # Step 1: 銘柄リストと必要な通貨を収集
+        ticker_symbols = [h.ticker_symbol for h in holdings]
+        currencies_needed = set()
+        for h in holdings:
+            if h.currency and h.currency not in ['JPY', '日本円']:
+                currencies_needed.add(h.currency)
+
+        # Step 2: すべての株価を一括取得（バッチ処理で最適化）
+        print(f"Fetching prices for {len(ticker_symbols)} holdings...")
+        prices_data = StockPriceFetcher.get_multiple_prices(ticker_symbols, use_cache=False)
+
+        # Step 3: 為替レートを一括取得
+        exchange_rates = {'JPY': 1.0, '日本円': 1.0}
+        if currencies_needed:
+            print(f"Fetching exchange rates for {len(currencies_needed)} currencies...")
+            for currency in currencies_needed:
+                rate_data = ExchangeRateFetcher.get_exchange_rate(currency, 'JPY')
+                if rate_data:
+                    exchange_rates[currency] = rate_data['rate']
+                else:
+                    exchange_rates[currency] = 1.0  # フォールバック
+
+        # Step 4: 各保有銘柄を更新
+        for holding in holdings:
+            try:
+                price_data = prices_data.get(holding.ticker_symbol)
+
+                if price_data:
+                    # Get exchange rate from pre-fetched rates
+                    exchange_rate = exchange_rates.get(holding.currency, 1.0)
+
+                    # Update holding with new price and exchange rate
+                    previous_close = price_data.get('previous_close')
+                    holding.update_current_price(price_data['price'], exchange_rate, previous_close)
+                    results['success'] += 1
+                else:
+                    results['failed'] += 1
+                    results['errors'].append({
+                        'ticker': holding.ticker_symbol,
+                        'error': 'Failed to fetch price'
+                    })
+            except Exception as e:
                 results['failed'] += 1
                 results['errors'].append({
                     'ticker': holding.ticker_symbol,
-                    'error': 'Failed to fetch price'
+                    'error': str(e)
                 })
 
+        # Step 5: データベースに一括コミット
         try:
             db.session.commit()
+            print(f"Updated {results['success']}/{len(holdings)} holdings successfully")
         except Exception as e:
             db.session.rollback()
             results['errors'].append({'error': f'Database commit failed: {str(e)}'})
+
+        # Step 6: 評価指標の更新
+        try:
+            from app.services.stock_metrics_fetcher import StockMetricsFetcher
+            logger.info("株価更新後の評価指標更新を開始")
+            metrics_results = StockMetricsFetcher.update_all_holdings_metrics()
+            results['metrics'] = metrics_results
+            logger.info(f"評価指標更新完了: 成功={metrics_results['success']}, 失敗={metrics_results['failed']}")
+        except Exception as e:
+            logger.warning(f"評価指標更新スキップ: {str(e)}")
+            results['metrics'] = {'success': 0, 'failed': 0, 'error': str(e)}
 
         return results
 

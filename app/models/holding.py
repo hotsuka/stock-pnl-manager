@@ -46,15 +46,19 @@ class Holding(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
-    def update_current_price(self, price, previous_close=None):
-        """株価更新と損益計算"""
+    def update_current_price(self, price, exchange_rate=1.0, previous_close=None):
+        """株価更新と損益計算 (評価額と損益は円建て)"""
         from decimal import Decimal
 
-        # Convert price to Decimal for consistent type handling
+        # Convert to Decimal
         price_decimal = Decimal(str(price))
+        rate_decimal = Decimal(str(exchange_rate))
 
         self.current_price = price_decimal
-        self.current_value = self.total_quantity * price_decimal
+        # 評価額を円換算して保持
+        self.current_value = (self.total_quantity * price_decimal) * rate_decimal
+
+        # 損益計算 (円建て - 円建て)
         self.unrealized_pnl = self.current_value - self.total_cost
         if self.total_cost > 0:
             self.unrealized_pnl_pct = (self.unrealized_pnl / self.total_cost) * 100
@@ -63,7 +67,7 @@ class Holding(db.Model):
         if previous_close is not None:
             self.previous_close = Decimal(str(previous_close))
             if previous_close > 0:
-                day_change = ((float(price_decimal) - previous_close) / previous_close) * 100
+                day_change = ((float(price_decimal) - float(previous_close)) / float(previous_close)) * 100
                 self.day_change_pct = Decimal(str(day_change))
 
         self.last_updated = datetime.utcnow()

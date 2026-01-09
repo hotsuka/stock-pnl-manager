@@ -7,58 +7,87 @@
     .filter-section {
         background: white;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         padding: 20px;
         margin-bottom: 20px;
     }
+
     .table-container {
         background: white;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         padding: 20px;
     }
+
     .action-bar {
         margin-bottom: 15px;
         display: flex;
         justify-content: space-between;
         align-items: center;
     }
+
     .transaction-type-buy {
         color: #0d6efd;
         font-weight: 500;
     }
+
     .transaction-type-sell {
         color: #dc3545;
         font-weight: 500;
     }
+
     .selected-count {
         color: #6c757d;
         font-size: 0.9rem;
     }
+
     .sortable {
         cursor: pointer;
         user-select: none;
         position: relative;
         padding-right: 20px;
     }
+
     .sortable:hover {
         background-color: #f8f9fa;
     }
+
     .sortable::after {
         content: '⇅';
         position: absolute;
         right: 5px;
         opacity: 0.3;
     }
+
     .sortable.sort-asc::after {
         content: '▲';
         opacity: 1;
         color: #0d6efd;
     }
+
     .sortable.sort-desc::after {
         content: '▼';
         opacity: 1;
         color: #0d6efd;
+    }
+
+    /* Sticky Header 修正版 */
+    .table-responsive {
+        overflow: visible !important;
+    }
+
+    #transactions-table thead th {
+        position: sticky;
+        top: 56px;
+        background-color: #fff !important;
+        z-index: 1020;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    /* ソート可能なヘッダーのホバー色も sticky 維持のため調整 */
+    #transactions-table thead th.sortable:hover {
+        background-color: #f8f9fa !important;
     }
 </style>
 {% endblock %}
@@ -85,14 +114,13 @@
         <div class="row mb-3">
             <div class="col-md-4">
                 <label for="searchTicker" class="form-label">ティッカー検索</label>
-                <input type="text" class="form-control" id="searchTicker"
-                       placeholder="例: AAPL" oninput="applyFilters()">
+                <input type="text" class="form-control" id="searchTicker" placeholder="例: AAPL"
+                    oninput="applyFilters()">
                 <small class="text-muted">部分一致で検索</small>
             </div>
             <div class="col-md-4">
                 <label for="searchName" class="form-label">銘柄名検索</label>
-                <input type="text" class="form-control" id="searchName"
-                       placeholder="例: Apple" oninput="applyFilters()">
+                <input type="text" class="form-control" id="searchName" placeholder="例: Apple" oninput="applyFilters()">
                 <small class="text-muted">部分一致で検索</small>
             </div>
             <div class="col-md-4">
@@ -158,16 +186,98 @@
                         <th class="sortable text-end" onclick="sortTable('commission')">手数料</th>
                         <th class="sortable text-end" onclick="sortTable('settlement_amount')">受渡金額</th>
                         <th class="sortable" onclick="sortTable('currency')">通貨</th>
+                        <th style="width: 100px;">操作</th>
                     </tr>
                 </thead>
                 <tbody id="transactions-tbody">
                     <tr>
-                        <td colspan="10" class="text-center">
+                        <td colspan="11" class="text-center">
                             <div class="loading">データを読み込み中...</div>
                         </td>
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- 編集モーダル -->
+    <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editModalLabel">取引データの編集</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editForm">
+                        <input type="hidden" id="edit_id">
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="edit_transaction_date" class="form-label">約定日 <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="edit_transaction_date" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="edit_transaction_type" class="form-label">取引種別 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="edit_transaction_type" required>
+                                    <option value="BUY">買付</option>
+                                    <option value="SELL">売却</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="edit_ticker_symbol" class="form-label">ティッカー <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="edit_ticker_symbol" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="edit_security_name" class="form-label">銘柄名</label>
+                                <input type="text" class="form-control" id="edit_security_name">
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="edit_quantity" class="form-label">数量 <span class="text-danger">*</span></label>
+                                <input type="number" step="0.0001" class="form-control" id="edit_quantity" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="edit_unit_price" class="form-label">単価 <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control" id="edit_unit_price" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="edit_currency" class="form-label">通貨 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="edit_currency" required>
+                                    <option value="JPY">JPY</option>
+                                    <option value="USD">USD</option>
+                                    <option value="KRW">KRW</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="edit_commission" class="form-label">手数料</label>
+                                <input type="number" step="0.01" class="form-control" id="edit_commission">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="edit_settlement_amount" class="form-label">受渡金額</label>
+                                <input type="number" step="0.01" class="form-control" id="edit_settlement_amount">
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            取引データを変更すると、関連する保有銘柄の平均取得単価が再計算されます。
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-primary" onclick="saveTransaction()">保存</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -183,7 +293,7 @@
     let currentSortDirection = 'desc';
 
     // ページ読み込み時
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         loadTransactions();
         loadTickerFilter();
         updateSortIndicators();
@@ -212,7 +322,7 @@
         } catch (error) {
             console.error('取引データの読み込みエラー:', error);
             document.getElementById('transactions-tbody').innerHTML =
-                '<tr><td colspan="10" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
+                '<tr><td colspan="11" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
         }
     }
 
@@ -269,7 +379,7 @@
         const tbody = document.getElementById('transactions-tbody');
 
         if (transactions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center">取引履歴がありません</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center">取引履歴がありません</td></tr>';
             return;
         }
 
@@ -290,6 +400,11 @@
                 <td class="text-end">${formatCurrency(t.commission)}</td>
                 <td class="text-end">${t.settlement_amount ? formatCurrency(t.settlement_amount) : '-'}</td>
                 <td>${t.currency}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="editTransaction(${t.id})" title="編集">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                </td>
             </tr>
         `).join('');
     }
@@ -474,6 +589,92 @@
     function formatNumber(value) {
         if (value === null || value === undefined) return '-';
         return Number(value).toLocaleString('ja-JP', { maximumFractionDigits: 4 });
+    }
+
+    // 取引の編集
+    async function editTransaction(id) {
+        try {
+            // 取引データを取得
+            const response = await fetch(`/api/transactions/${id}`);
+            const result = await response.json();
+
+            if (result.success) {
+                const transaction = result.transaction;
+
+                // フォームに値をセット
+                document.getElementById('edit_id').value = transaction.id;
+                document.getElementById('edit_transaction_date').value = transaction.transaction_date;
+                document.getElementById('edit_ticker_symbol').value = transaction.ticker_symbol;
+                document.getElementById('edit_security_name').value = transaction.security_name || '';
+                document.getElementById('edit_transaction_type').value = transaction.transaction_type;
+                document.getElementById('edit_quantity').value = transaction.quantity;
+                document.getElementById('edit_unit_price').value = transaction.unit_price;
+                document.getElementById('edit_commission').value = transaction.commission || '';
+                document.getElementById('edit_settlement_amount').value = transaction.settlement_amount || '';
+                document.getElementById('edit_currency').value = transaction.currency;
+
+                // モーダルを表示
+                const modal = new bootstrap.Modal(document.getElementById('editModal'));
+                modal.show();
+            } else {
+                alert('取引データの取得に失敗しました: ' + result.error);
+            }
+        } catch (error) {
+            console.error('取引データの取得エラー:', error);
+            alert('取引データの取得に失敗しました');
+        }
+    }
+
+    // 取引の保存
+    async function saveTransaction() {
+        const id = document.getElementById('edit_id').value;
+
+        // フォームデータを取得
+        const data = {
+            transaction_date: document.getElementById('edit_transaction_date').value,
+            ticker_symbol: document.getElementById('edit_ticker_symbol').value,
+            security_name: document.getElementById('edit_security_name').value,
+            transaction_type: document.getElementById('edit_transaction_type').value,
+            quantity: parseFloat(document.getElementById('edit_quantity').value),
+            unit_price: parseFloat(document.getElementById('edit_unit_price').value),
+            commission: document.getElementById('edit_commission').value ? parseFloat(document.getElementById('edit_commission').value) : 0,
+            settlement_amount: document.getElementById('edit_settlement_amount').value ? parseFloat(document.getElementById('edit_settlement_amount').value) : null,
+            currency: document.getElementById('edit_currency').value
+        };
+
+        // バリデーション
+        if (!data.transaction_date || !data.ticker_symbol || !data.quantity || !data.unit_price) {
+            alert('必須項目を入力してください');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/transactions/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert('取引を更新しました\n\n影響を受けた銘柄: ' + result.affected_tickers.join(', '));
+
+                // モーダルを閉じる
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editModal'));
+                modal.hide();
+
+                // データを再読み込み
+                await loadTransactions();
+            } else {
+                alert('更新に失敗しました: ' + result.error);
+            }
+        } catch (error) {
+            console.error('更新エラー:', error);
+            alert('更新に失敗しました');
+        }
     }
 </script>
 {% endblock %}

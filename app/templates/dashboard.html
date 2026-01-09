@@ -7,87 +7,152 @@
     .summary-card {
         background: white;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         padding: 20px;
-        margin-bottom: 20px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
     }
+
     .summary-card h3 {
         font-size: 0.9rem;
         color: #6c757d;
         margin-bottom: 10px;
         font-weight: 500;
     }
+
     .summary-card .value {
         font-size: 1.8rem;
         font-weight: bold;
         margin-bottom: 5px;
     }
+
     .summary-card .change {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        margin-top: 5px;
+        line-height: 1.4;
     }
+
+    .summary-details {
+        font-size: 0.8rem;
+        color: #6c757d;
+        border-top: 1px solid #f0f0f0;
+        margin-top: auto;
+        padding-top: 8px;
+    }
+
+    .summary-details div {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 2px;
+    }
+
     .positive {
         color: #28a745;
     }
+
     .negative {
         color: #dc3545;
     }
+
     .chart-container {
         background: white;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         padding: 20px;
         margin-bottom: 20px;
     }
+
+    .chart-container.h-100 {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .chart-container.h-100>div:last-child {
+        flex-grow: 1;
+        min-height: 400px;
+    }
+
+    .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
     .chart-title {
         font-size: 1.2rem;
         font-weight: 600;
-        margin-bottom: 15px;
+        margin-bottom: 0;
         color: #333;
     }
+
+    .btn-expand {
+        padding: 2px 8px;
+        font-size: 0.8rem;
+        color: #6c757d;
+        border-color: #dee2e6;
+    }
+
+    .btn-expand:hover {
+        background-color: #f8f9fa;
+        color: #0d6efd;
+    }
+
     .period-selector {
         margin-bottom: 15px;
     }
+
     .period-selector .btn {
         margin-right: 5px;
     }
+
     .loading {
         text-align: center;
         padding: 40px;
         color: #6c757d;
     }
+
     .table-container {
         background: white;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         padding: 20px;
         margin-top: 20px;
     }
+
     #holdings-tfoot tr {
         border-top: 2px solid #dee2e6;
         font-weight: bold;
     }
+
     #holdings-tfoot td {
         padding: 12px 8px;
     }
+
     .sortable {
         cursor: pointer;
         user-select: none;
         position: relative;
         padding-right: 20px;
     }
+
     .sortable:hover {
         background-color: #f8f9fa;
     }
+
     .sortable::after {
         content: '⇅';
         position: absolute;
         right: 5px;
         opacity: 0.3;
     }
+
     .sortable.asc::after {
         content: '▲';
         opacity: 1;
     }
+
     .sortable.desc::after {
         content: '▼';
         opacity: 1;
@@ -105,58 +170,71 @@
     </div>
 
     <!-- サマリーカード -->
-    <div class="row" id="summary-cards">
-        <div class="col-md-3 col-sm-6">
+    <div class="row mb-4" id="summary-cards">
+        <!-- 1. 投資実績銘柄数 -->
+        <div class="col-md-3 col-sm-6 mb-3">
             <div class="summary-card">
-                <h3>総資産額</h3>
-                <div class="value" id="total-asset">-</div>
-                <div class="change text-muted">現在の評価額</div>
+                <h3>投資実績銘柄数</h3>
+                <div class="value" id="summary-tickers-total">-</div>
+                <div class="summary-details">
+                    <div><span>保有中</span><span id="summary-tickers-active">-</span></div>
+                    <div><span>売却済み</span><span id="summary-tickers-realized">-</span></div>
+                </div>
             </div>
         </div>
-        <div class="col-md-3 col-sm-6">
+        <!-- 2. 総投資額 -->
+        <div class="col-md-3 col-sm-6 mb-3">
             <div class="summary-card">
                 <h3>総投資額</h3>
-                <div class="value" id="total-investment">-</div>
-                <div class="change text-muted">取得コスト</div>
+                <div class="value" id="summary-investment-total">-</div>
+                <div class="summary-details">
+                    <div><span>保有銘柄</span><span id="summary-investment-holdings">-</span></div>
+                    <div><span>売却済み銘柄</span><span id="summary-investment-realized">-</span></div>
+                </div>
             </div>
         </div>
-        <div class="col-md-3 col-sm-6">
+        <!-- 3. 総評価額 -->
+        <div class="col-md-3 col-sm-6 mb-3">
+            <div class="summary-card">
+                <h3>総評価額</h3>
+                <div class="value" id="summary-evaluation-total">-</div>
+                <div class="summary-details">
+                    <div><span>保有時価</span><span id="summary-evaluation-holdings">-</span></div>
+                    <div><span>累計売却額</span><span id="summary-evaluation-realized">-</span></div>
+                    <div><span>累計配当</span><span id="summary-evaluation-dividends">-</span></div>
+                </div>
+            </div>
+        </div>
+        <!-- 4. 総合損益 -->
+        <div class="col-md-3 col-sm-6 mb-3">
             <div class="summary-card">
                 <h3>総合損益</h3>
-                <div class="value" id="total-pnl">-</div>
-                <div class="change" id="total-pnl-pct">-</div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="summary-card">
-                <h3>保有銘柄数</h3>
-                <div class="value" id="holdings-count">-</div>
-                <div class="change text-muted">銘柄</div>
+                <div class="value" id="summary-pnl-amount">-</div>
+                <div class="change" id="summary-pnl-percentage">-</div>
+                <div class="summary-details text-muted" style="border: none;">
+                    (総評価額 - 総投資額)
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- 損益推移グラフ -->
-    <div class="chart-container">
-        <div class="chart-title">損益推移</div>
-        <div class="period-selector">
-            <button class="btn btn-sm btn-outline-primary active" data-period="30d" onclick="changePeriod('30d', this)">過去30日</button>
-            <button class="btn btn-sm btn-outline-primary" data-period="1y" onclick="changePeriod('1y', this)">過去1年</button>
-            <button class="btn btn-sm btn-outline-primary" data-period="all" onclick="changePeriod('all', this)">全期間</button>
-        </div>
-        <div id="pnl-chart" style="height: 400px;">
-            <div class="loading">データを読み込み中...</div>
-        </div>
-    </div>
 
-    <!-- グラフ行 -->
-    <div class="row">
-        <div class="col-md-6">
-            <div class="chart-container">
-                <div class="chart-title">ポートフォリオ構成</div>
+    <!-- グラフ行 1 -->
+    <div class="row mb-4">
+        <div class="col-md-6 mb-3 mb-md-0">
+            <div class="chart-container h-100">
+                <div class="chart-header">
+                    <div class="chart-title">ポートフォリオ構成</div>
+                    <button class="btn btn-sm btn-outline-secondary btn-expand"
+                        onclick="openExpandedChart('portfolio')">
+                        拡大
+                    </button>
+                </div>
                 <div class="btn-group mb-2" role="group">
-                    <button type="button" class="btn btn-sm btn-outline-primary active" id="btn-portfolio-pnl" onclick="switchPortfolioMode('pnl')">損益率</button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="btn-portfolio-day-change" onclick="switchPortfolioMode('day_change')">対前日変動率</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary active" id="btn-portfolio-pnl"
+                        onclick="switchPortfolioMode('pnl')">損益率</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btn-portfolio-day-change"
+                        onclick="switchPortfolioMode('day_change')">対前日変動率</button>
                 </div>
                 <div id="portfolio-chart" style="height: 400px;">
                     <div class="loading">データを読み込み中...</div>
@@ -164,8 +242,13 @@
             </div>
         </div>
         <div class="col-md-6">
-            <div class="chart-container">
-                <div class="chart-title">保有銘柄別損益</div>
+            <div class="chart-container h-100">
+                <div class="chart-header">
+                    <div class="chart-title">保有銘柄別損益</div>
+                    <button class="btn btn-sm btn-outline-secondary btn-expand" onclick="openExpandedChart('holdings')">
+                        拡大
+                    </button>
+                </div>
                 <div id="holdings-chart" style="height: 400px;">
                     <div class="loading">データを読み込み中...</div>
                 </div>
@@ -173,6 +256,62 @@
         </div>
     </div>
 
+    <!-- グラフ行 2 (年別実績 & 売却済み銘柄損益率) -->
+    <div class="row mb-4">
+        <div class="col-md-6 mb-3 mb-md-0">
+            <div class="chart-container h-100">
+                <div class="chart-title">年別実績</div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th>年</th>
+                                <th class="text-end">取得コスト</th>
+                                <th class="text-end">売却額</th>
+                                <th class="text-end">実現損益</th>
+                                <th class="text-end">損益率</th>
+                            </tr>
+                        </thead>
+                        <tbody id="yearly-stats-body">
+                            <!-- JSで挿入 -->
+                        </tbody>
+                        <tfoot class="table-light font-weight-bold" id="yearly-stats-footer">
+                            <!-- JSで挿入 -->
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container h-100">
+                <div class="chart-header">
+                    <div class="chart-title">実現損益</div>
+                    <button class="btn btn-sm btn-outline-secondary btn-expand" onclick="openExpandedChart('realized')">
+                        拡大
+                    </button>
+                </div>
+                <div id="realized-pnl-pct-chart" style="height: 400px;">
+                    <div class="loading">データを読み込み中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- グラフ拡大用モーダル -->
+<div class="modal fade" id="chartModal" tabindex="-1" aria-labelledby="chartModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="chartModalLabel">グラフ拡大</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="expanded-chart" style="width: 100%; height: 600px;"></div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -181,116 +320,115 @@
 <script>
     let currentPeriod = '30d';
     let holdingsData = [];
+    let realizedPnlData = []; // Store realized P&L data globally
     let exchangeRates = {};  // Store exchange rates
     let currentPortfolioMode = 'pnl';  // 'pnl' or 'day_change'
 
+    // ティッカーから通貨を推測するヘルパー関数
+    function inferCurrency(ticker, dbCurrency) {
+        // 日本株（.Tで終わる）
+        if (ticker.endsWith('.T')) return 'JPY';
+        // 韓国株（.KSで終わる）
+        if (ticker.endsWith('.KS')) return 'KRW';
+        // 上記以外で、DBの通貨がJPYの場合は米国株と推測
+        if (dbCurrency === 'JPY' && !ticker.includes('.')) return 'USD';
+        // その他はDBの値を使用
+        return dbCurrency;
+    }
+
     // ページ読み込み時にデータ取得
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         loadDashboardData();
     });
 
     // 全データの読み込み
     async function loadDashboardData() {
-        // First load exchange rates
-        await loadExchangeRates();
+        // 1. まず保有銘柄データを取得
+        await loadHoldingsData();
 
-        // Then load other data
-        await Promise.all([
-            loadSummary(),
-            loadPnlHistory(currentPeriod),
-            loadHoldingsData()  // This will also create the portfolio treemap and charts
-        ]);
+        // 2. 必要な為替レートを取得（詳細表示や再計算用）
+        if (holdingsData.length > 0) {
+            const currencies = [...new Set(holdingsData.map(h => h.currency))].filter(c => c !== 'JPY' && c !== '日本円');
+            if (currencies.length > 0) {
+                await loadExchangeRates(currencies);
+            }
+        }
+
+        // 3. サマリーデータを取得（APIが計算済みの円建てデータを返す）
+        await fetchSummaryData();
+
+        // 4. チャートを描画
+        console.log('Charting data:', holdingsData);
+        try {
+            createPortfolioTreemap(holdingsData, currentPortfolioMode);
+        } catch (e) {
+            console.error('Error drawing treemap:', e);
+        }
+
+        try {
+            createHoldingsPnlChart(holdingsData);
+        } catch (e) {
+            console.error('Error drawing pnl chart:', e);
+        }
+
+        // 5. 年別実績と売却済み銘柄チャートをロード
+        await loadYearlyStats();
+        await loadRealizedPnlChart();
+    }
+
+    async function fetchSummaryData() {
+        try {
+            const response = await fetch('/api/dashboard/summary');
+            const result = await response.json();
+            if (result.success) {
+                updateSummaryDOM(result.summary);
+            }
+        } catch (error) {
+            console.error('サマリーデータの取得エラー:', error);
+        }
+    }
+
+    function updateSummaryDOM(summary) {
+        // 1. 投資実績銘柄数
+        document.getElementById('summary-tickers-total').textContent = summary.ticker_counts.total;
+        document.getElementById('summary-tickers-active').textContent = summary.ticker_counts.active + ' 銘柄';
+        document.getElementById('summary-tickers-realized').textContent = summary.ticker_counts.realized + ' 銘柄';
+
+        // 2. 総投資額
+        document.getElementById('summary-investment-total').textContent = formatCurrency(summary.investment.total);
+        document.getElementById('summary-investment-holdings').textContent = formatCurrency(summary.investment.holdings) + ' 円';
+        document.getElementById('summary-investment-realized').textContent = formatCurrency(summary.investment.realized) + ' 円';
+
+        // 3. 総評価額
+        document.getElementById('summary-evaluation-total').textContent = formatCurrency(summary.evaluation.total);
+        document.getElementById('summary-evaluation-holdings').textContent = formatCurrency(summary.evaluation.holdings) + ' 円';
+        document.getElementById('summary-evaluation-realized').textContent = formatCurrency(summary.evaluation.realized) + ' 円';
+        document.getElementById('summary-evaluation-dividends').textContent = formatCurrency(summary.evaluation.dividends) + ' 円';
+
+        // 4. 総合損益
+        const pnl = summary.total_pnl.amount;
+        const pnlPct = summary.total_pnl.percentage;
+        const pnlElement = document.getElementById('summary-pnl-amount');
+        pnlElement.textContent = (pnl >= 0 ? '+' : '') + formatCurrency(pnl);
+        pnlElement.className = 'value ' + (pnl >= 0 ? 'positive' : 'negative');
+
+        const pnlPctElement = document.getElementById('summary-pnl-percentage');
+        pnlPctElement.textContent = formatPercentage(pnlPct);
+        pnlPctElement.className = 'change ' + (pnl >= 0 ? 'positive' : 'negative');
     }
 
     // 為替レートの読み込み
-    async function loadExchangeRates() {
+    async function loadExchangeRates(currencies = ['USD', 'KRW']) {
         try {
-            const response = await fetch('/api/exchange-rate/multiple?currencies=USD,KRW');
+            const currencyStr = currencies.join(',');
+            const response = await fetch(`/api/exchange-rate/multiple?currencies=${currencyStr}`);
             const result = await response.json();
 
             if (result.success) {
                 exchangeRates = result.rates;
-                displayExchangeRates();
             }
         } catch (error) {
             console.error('為替レートの読み込みエラー:', error);
-        }
-    }
-
-
-    // サマリーデータの読み込み
-    async function loadSummary() {
-        try {
-            const response = await fetch('/api/dashboard/summary');
-            const result = await response.json();
-
-            if (result.success) {
-                const summary = result.summary;
-
-                document.getElementById('total-asset').textContent = formatCurrency(summary.total_asset_value);
-                document.getElementById('total-investment').textContent = formatCurrency(summary.total_investment);
-                document.getElementById('total-pnl').textContent = formatCurrency(summary.total_pnl);
-                document.getElementById('total-pnl').className = 'value ' + (summary.total_pnl >= 0 ? 'positive' : 'negative');
-
-                const pnlPctElement = document.getElementById('total-pnl-pct');
-                pnlPctElement.textContent = formatPercentage(summary.total_pnl_pct);
-                pnlPctElement.className = 'change ' + (summary.total_pnl >= 0 ? 'positive' : 'negative');
-
-                document.getElementById('holdings-count').textContent = summary.holdings_count;
-            }
-        } catch (error) {
-            console.error('サマリーデータの読み込みエラー:', error);
-        }
-    }
-
-    // 損益推移グラフの読み込み
-    async function loadPnlHistory(period) {
-        try {
-            const response = await fetch(`/api/dashboard/pnl-history?period=${period}`);
-            const result = await response.json();
-
-            if (result.success) {
-                const data = result.data;
-
-                const trace = {
-                    x: data.map(d => d.date),
-                    y: data.map(d => d.pnl),
-                    type: 'scatter',
-                    mode: 'lines+markers',
-                    name: '損益',
-                    line: {
-                        color: '#0d6efd',
-                        width: 2
-                    },
-                    marker: {
-                        size: 4
-                    }
-                };
-
-                const layout = {
-                    margin: { t: 10, r: 30, b: 40, l: 80 },
-                    xaxis: {
-                        title: '日付',
-                        type: 'date'
-                    },
-                    yaxis: {
-                        title: '損益 (円)',
-                        tickformat: ',.0f'
-                    },
-                    hovermode: 'closest',
-                    showlegend: false
-                };
-
-                const config = {
-                    responsive: true,
-                    displayModeBar: false
-                };
-
-                Plotly.newPlot('pnl-chart', [trace], layout, config);
-            }
-        } catch (error) {
-            console.error('損益推移データの読み込みエラー:', error);
-            document.getElementById('pnl-chart').innerHTML = '<div class="loading text-danger">データの読み込みに失敗しました</div>';
         }
     }
 
@@ -307,9 +445,12 @@
     }
 
     // ポートフォリオ構成ツリーマップの作成
-    function createPortfolioTreemap(holdings, mode = 'pnl') {
+    function createPortfolioTreemap(holdings, mode = 'pnl', targetId = 'portfolio-chart') {
+        const container = document.getElementById(targetId);
+        if (!container) return;
+
         if (!holdings || holdings.length === 0) {
-            document.getElementById('portfolio-chart').innerHTML = '<div class="loading">保有銘柄がありません</div>';
+            container.innerHTML = '<div class="loading">保有銘柄がありません</div>';
             return;
         }
 
@@ -325,14 +466,15 @@
         const holdingsWithMetrics = validHoldings.map(h => {
             const pnlPct = calculateUnrealizedPnLPct(h);
             const dayChangePct = h.day_change_pct !== null && h.day_change_pct !== undefined ? h.day_change_pct : 0;
+            const jpyValue = convertToJPY(h.current_value, h.currency);
 
             return {
                 name: h.security_name || h.ticker_symbol,
-                value: convertToJPY(h.current_value, h.currency) || 0,
-                pnlPct: pnlPct !== null ? pnlPct : 0,
-                dayChangePct: dayChangePct
+                value: h.current_value || 0, // Already JPY from DB
+                pnlPct: pnlPct !== null && !isNaN(pnlPct) ? pnlPct : 0,
+                dayChangePct: !isNaN(parseFloat(dayChangePct)) ? parseFloat(dayChangePct) : 0
             };
-        });
+        }).filter(h => h.value > 0); // Ensure size is positive
 
         // Select metric based on mode
         const metricValues = mode === 'day_change'
@@ -353,11 +495,19 @@
             marker: {
                 colors: metricValues,
                 colorscale: [
-                    [0, '#dc3545'],      // Red for negative
-                    [0.5, '#ffc107'],    // Yellow for neutral
-                    [1, '#28a745']       // Green for positive
+                    [0, '#8b0000'],      // Dark Red (Deep loss)
+                    [0.25, '#dc3545'],   // Red (Moderate loss)
+                    [0.5, '#e9ecef'],    // Light Gray (Neutral)
+                    [0.75, '#28a745'],   // Green (Moderate gain)
+                    [1, '#006400']       // Dark Green (Deep gain)
                 ],
+                cmin: -5,  // Color range capped at +/- 5% for better visibility of small changes
+                cmax: 5,
                 cmid: 0,
+                line: {
+                    color: '#ffffff',
+                    width: 2
+                },
                 colorbar: {
                     title: metricLabel,
                     ticksuffix: '%'
@@ -377,12 +527,12 @@
             displayModeBar: false
         };
 
-        Plotly.newPlot('portfolio-chart', [trace], layout, config);
-    }
-
-    async function loadPortfolioComposition() {
-        // This function is now called from loadHoldingsTable
-        // to ensure holdingsData is available
+        try {
+            Plotly.newPlot(targetId, [trace], layout, config);
+        } catch (error) {
+            console.error(`Plotly.newPlot error (${targetId}):`, error);
+            container.innerHTML = '<div class="loading text-danger">グラフの描画に失敗しました</div>';
+        }
     }
 
     // 保有銘柄データの読み込み（チャート表示用）
@@ -392,13 +542,13 @@
             const result = await response.json();
 
             if (result.success) {
-                holdingsData = result.holdings.map(h => ({
-                    ...h,
-                    calculated_unrealized_pnl: calculateUnrealizedPnL(h),
-                    calculated_unrealized_pnl_pct: calculateUnrealizedPnLPct(h)
-                }));
-                createPortfolioTreemap(holdingsData);
-                createHoldingsPnlChart(holdingsData);
+                holdingsData = result.holdings.map(h => {
+                    const correctedCurrency = inferCurrency(h.ticker_symbol, h.currency);
+                    return {
+                        ...h,
+                        currency: correctedCurrency
+                    };
+                });
             }
         } catch (error) {
             console.error('保有銘柄データの読み込みエラー:', error);
@@ -422,46 +572,38 @@
     }
 
 
-    // 未実現損益を計算（評価額(JPY) - 取得コスト）
+    // 未実現損益を計算（DBの円建て値を信頼）
     function calculateUnrealizedPnL(holding) {
-        if (holding.current_value === null || holding.current_value === undefined ||
-            holding.total_cost === null || holding.total_cost === undefined) {
-            return null;
+        if (holding.unrealized_pnl !== null && holding.unrealized_pnl !== undefined) {
+            return parseFloat(holding.unrealized_pnl);
         }
-
-        const currentValueJPY = convertToJPY(holding.current_value, holding.currency);
-        if (currentValueJPY === null) return null;
-
-        const totalCost = parseFloat(holding.total_cost);
-        if (isNaN(totalCost)) return null;
-
-        return currentValueJPY - totalCost;
+        return null;
     }
 
-    // 未実現損益率を計算
     function calculateUnrealizedPnLPct(holding) {
-        const pnl = calculateUnrealizedPnL(holding);
-        if (pnl === null || !holding.total_cost) return null;
-
-        const totalCost = parseFloat(holding.total_cost);
-        if (totalCost === 0) return null;
-
-        return (pnl / totalCost) * 100;
+        if (holding.unrealized_pnl_pct !== null && holding.unrealized_pnl_pct !== undefined) {
+            return parseFloat(holding.unrealized_pnl_pct);
+        }
+        return null;
     }
 
 
     // 保有銘柄別損益バーチャート
-    function createHoldingsPnlChart(holdings) {
+    function createHoldingsPnlChart(holdings, targetId = 'holdings-chart') {
+        const container = document.getElementById(targetId);
+        if (!container) return;
+
         // Calculate P&L for each holding
         const holdingsWithPnL = holdings.map(h => ({
             ...h,
             calculatedPnL: calculateUnrealizedPnL(h)
         }));
 
-        const validHoldings = holdingsWithPnL.filter(h => h.calculatedPnL !== null);
+        const validHoldings = holdingsWithPnL.filter(h => h.calculatedPnL !== null && !isNaN(h.calculatedPnL));
 
         if (validHoldings.length === 0) {
-            document.getElementById('holdings-chart').innerHTML = '<div class="loading">損益データがありません</div>';
+            console.warn('No valid holdings with PnL found for chart');
+            container.innerHTML = '<div class="loading">損益データがありません</div>';
             return;
         }
 
@@ -503,7 +645,12 @@
             displayModeBar: false
         };
 
-        Plotly.newPlot('holdings-chart', [trace], layout, config);
+        try {
+            Plotly.newPlot(targetId, [trace], layout, config);
+        } catch (error) {
+            console.error(`Plotly.newPlot error (${targetId}):`, error);
+            container.innerHTML = '<div class="loading text-danger">グラフの描画に失敗しました</div>';
+        }
     }
 
     // 期間変更
@@ -518,6 +665,143 @@
 
         // グラフを再読み込み
         loadPnlHistory(period);
+    }
+
+    // 年別実績の読み込み
+    async function loadYearlyStats() {
+        try {
+            const response = await fetch('/api/dashboard/yearly-stats');
+            const result = await response.json();
+
+            if (result.success) {
+                const tbody = document.getElementById('yearly-stats-body');
+                const tfoot = document.getElementById('yearly-stats-footer');
+
+                tbody.innerHTML = '';
+                result.yearly_stats.forEach(s => {
+                    const row = document.createElement('tr');
+                    const pnlClass = s.realized_pnl >= 0 ? 'positive' : 'negative';
+                    row.innerHTML = `
+                        <td>${s.year}</td>
+                        <td class="text-end">${formatCurrency(s.total_cost)}</td>
+                        <td class="text-end">${formatCurrency(s.total_proceeds)}</td>
+                        <td class="text-end ${pnlClass}">${formatCurrency(s.realized_pnl)}</td>
+                        <td class="text-end ${pnlClass}">${formatPercentage(s.pnl_pct)}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                const total = result.total;
+                const totalPnlClass = total.realized_pnl >= 0 ? 'positive' : 'negative';
+                tfoot.innerHTML = `
+                    <tr>
+                        <td>合計</td>
+                        <td class="text-end">${formatCurrency(total.total_cost)}</td>
+                        <td class="text-end">${formatCurrency(total.total_proceeds)}</td>
+                        <td class="text-end ${totalPnlClass}">${formatCurrency(total.realized_pnl)}</td>
+                        <td class="text-end ${totalPnlClass}">${formatPercentage(total.pnl_pct)}</td>
+                    </tr>
+                `;
+            }
+        } catch (error) {
+            console.error('年別実績の読み込みエラー:', error);
+        }
+    }
+
+    // 売却済み銘柄損益グラフの読み込み
+    async function loadRealizedPnlChart() {
+        try {
+            const response = await fetch('/api/realized-pnl');
+            const result = await response.json();
+
+            if (result.success) {
+                realizedPnlData = result.realized_pnl;
+                createRealizedPnlPctChart(realizedPnlData);
+            }
+        } catch (error) {
+            console.error('売却済み銘柄損益データの読み込みエラー:', error);
+        }
+    }
+
+    function createRealizedPnlPctChart(realizedPnlData, targetId = 'realized-pnl-pct-chart') {
+        const container = document.getElementById(targetId);
+        if (!container) return;
+
+        if (!realizedPnlData || realizedPnlData.length === 0) {
+            container.innerHTML = '<div class="loading">データがありません</div>';
+            return;
+        }
+
+        // Sort by realized P&L amount
+        const sortedData = [...realizedPnlData].sort((a, b) => (b.realized_pnl || 0) - (a.realized_pnl || 0));
+
+        const trace = {
+            x: sortedData.map(d => d.security_name || d.ticker_symbol),
+            y: sortedData.map(d => d.realized_pnl),
+            type: 'bar',
+            marker: {
+                color: sortedData.map(d => (d.realized_pnl || 0) >= 0 ? '#28a745' : '#dc3545')
+            },
+            text: sortedData.map(d => formatCurrency(d.realized_pnl)),
+            textposition: 'auto',
+            hoverinfo: 'x+y'
+        };
+
+        const layout = {
+            margin: { t: 10, r: 30, b: 120, l: 80 },
+            xaxis: {
+                title: '銘柄',
+                tickangle: -45,
+                automargin: true,
+                tickfont: {
+                    size: 10
+                }
+            },
+            yaxis: {
+                title: '実現損益 (円)',
+                tickformat: ',.0f',
+                automargin: true
+            },
+            showlegend: false
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: false
+        };
+
+        try {
+            Plotly.newPlot(targetId, [trace], layout, config);
+        } catch (error) {
+            console.error(`Plotly.newPlot error (${targetId}):`, error);
+            container.innerHTML = '<div class="loading text-danger">グラフの描画に失敗しました</div>';
+        }
+    }
+
+    // グラフ拡大表示
+    function openExpandedChart(chartType) {
+        const modal = new bootstrap.Modal(document.getElementById('chartModal'));
+        const expandedContainer = document.getElementById('expanded-chart');
+        const modalTitle = document.getElementById('chartModalLabel');
+
+        // Clear previous chart
+        expandedContainer.innerHTML = '<div class="loading">描画中...</div>';
+
+        modal.show();
+
+        // 描画タイミング調整
+        setTimeout(() => {
+            if (chartType === 'portfolio') {
+                modalTitle.innerText = 'ポートフォリオ構成 - 拡大表示';
+                createPortfolioTreemap(holdingsData, currentPortfolioMode, 'expanded-chart');
+            } else if (chartType === 'holdings') {
+                modalTitle.innerText = '保有銘柄別損益 - 拡大表示';
+                createHoldingsPnlChart(holdingsData, 'expanded-chart');
+            } else if (chartType === 'realized') {
+                modalTitle.innerText = '実現損益 - 拡大表示';
+                createRealizedPnlPctChart(realizedPnlData, 'expanded-chart');
+            }
+        }, 300);
     }
 
     // 全データを更新

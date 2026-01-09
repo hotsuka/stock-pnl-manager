@@ -38,3 +38,9 @@ def dividends():
 def transactions():
     """Transactions page"""
     return render_template('transactions.html')
+
+
+@bp.route('/performance')
+def performance():
+    """Performance History page"""
+    return render_template('performance.html')
