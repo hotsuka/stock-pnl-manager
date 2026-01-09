@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>評価指標表示テスト</title>
+</head>
+<body>
+    <h1>評価指標フォーマットテスト</h1>
+
+    <script>
+    // 関数定義をコピー
+    function formatMarketCap(value, currency) {
+        if (!value) return '-';
+        if (currency === 'JPY') {
+            if (value >= 1e12) return (value / 1e12).toFixed(2) + '兆円';
+            if (value >= 1e8) return (value / 1e8).toFixed(0) + '億円';
+        } else {
+            // TN (Trillion), BN (Billion), MN (Million) - 小数点なし
+            if (value >= 1e12) return (value / 1e12).toFixed(0) + 'TN';
+            if (value >= 1e9) return (value / 1e9).toFixed(0) + 'BN';
+            if (value >= 1e6) return (value / 1e6).toFixed(0) + 'MN';
+        }
+        return value.toLocaleString() + ' ' + currency;
+    }
+
+    function formatPercentageMetrics(value) {
+        if (value === null || value === undefined) return '-';
+        const pct = value * 100;
+        return pct.toFixed(2) + '%';
+    }
+
+    // テストケース
+    console.log('=== 時価総額フォーマットテスト ===');
+    console.log('MSFT (3.55T USD):', formatMarketCap(3553871003648, 'USD'));
+    console.log('6498.T (1596億 JPY):', formatMarketCap(159695142912, 'JPY'));
+    console.log('500B USD:', formatMarketCap(500000000000, 'USD'));
+    console.log('1.5M USD:', formatMarketCap(1500000, 'USD'));
+
+    console.log('\n=== 利益率フォーマットテスト ===');
+    console.log('6.61%:', formatPercentageMetrics(0.0661));
+    console.log('4.71%:', formatPercentageMetrics(0.0471));
+    console.log('-5%:', formatPercentageMetrics(-0.05));
+
+    // 実際のAPIデータをフェッチしてテスト
+    console.log('\n=== 実際のAPIデータ ===');
+    fetch('/api/holdings/metrics')
+        .then(r => r.json())
+        .then(data => {
+            console.log('API Success:', data.success);
+            console.log('件数:', data.count);
+            if (data.metrics && data.metrics.length > 0) {
+                console.log('\n最初の3件:');
+                for (let i = 0; i < Math.min(3, data.metrics.length); i++) {
+                    const m = data.metrics[i];
+                    console.log(`\n${m.ticker_symbol}:`);
+                    console.log('  通貨:', m.currency);
+                    console.log('  時価総額（生データ）:', m.market_cap);
+                    console.log('  時価総額（表示）:', formatMarketCap(m.market_cap, m.currency));
+                    console.log('  利益率（生データ）:', m.profit_margin);
+                    console.log('  利益率（表示）:', formatPercentageMetrics(m.profit_margin));
+                    console.log('  YTDリターン:', m.ytd_return);
+                    console.log('  1年リターン:', m.one_year_return);
+                }
+            }
+        })
+        .catch(e => console.error('Error:', e));
+
+    // ページに結果を表示
+    document.write('<pre id="results">コンソールを確認してください (F12)</pre>');
+    </script>
+</body>
+</html>

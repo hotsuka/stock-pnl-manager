@@ -109,8 +109,14 @@ class StockMetricsFetcher:
 
             # YTD Return: 年初からのリターン
             ytd_return = None
-            year_start = datetime(date.today().year, 1, 1)
-            year_start_data = hist[hist.index >= year_start]
+            year_start = date(date.today().year, 1, 1)
+            # タイムスタンプをdateに変換
+            try:
+                year_start_data = hist[hist.index.date >= year_start]
+            except AttributeError:
+                # DatetimeIndexの場合
+                year_start_data = hist[[d.date() >= year_start for d in hist.index]]
+
             if not year_start_data.empty:
                 year_start_price = year_start_data['Close'].iloc[0]
                 ytd_return = (current_price - year_start_price) / year_start_price
@@ -118,7 +124,11 @@ class StockMetricsFetcher:
             # 1-Year Return: 365日前からのリターン
             one_year_return = None
             one_year_ago = date.today() - timedelta(days=365)
-            one_year_data = hist[hist.index.date <= one_year_ago]
+            try:
+                one_year_data = hist[hist.index.date <= one_year_ago]
+            except AttributeError:
+                one_year_data = hist[[d.date() <= one_year_ago for d in hist.index]]
+
             if not one_year_data.empty:
                 one_year_price = one_year_data['Close'].iloc[-1]
                 one_year_return = (current_price - one_year_price) / one_year_price
@@ -130,6 +140,8 @@ class StockMetricsFetcher:
 
         except Exception as e:
             logger.error(f"リターン計算エラー: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {'ytd_return': None, 'one_year_return': None}
 
     @staticmethod

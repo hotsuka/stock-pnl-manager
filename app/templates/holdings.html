@@ -557,35 +557,52 @@
 
     // 評価指標データを取得
     async function loadMetricsData() {
+        console.log('[DEBUG] loadMetricsData 開始');
         const tbody = document.getElementById('metrics-tbody');
         tbody.innerHTML = '<tr><td colspan="14" class="text-center"><div class="loading">データを読み込み中...</div></td></tr>';
 
         try {
+            console.log('[DEBUG] APIリクエスト送信: /api/holdings/metrics');
             const response = await fetch('/api/holdings/metrics');
+            console.log('[DEBUG] レスポンス受信:', response.status, response.ok);
+
             const result = await response.json();
+            console.log('[DEBUG] JSONパース完了:', result);
+            console.log('[DEBUG] success:', result.success);
+            console.log('[DEBUG] count:', result.count);
+            console.log('[DEBUG] metrics length:', result.metrics ? result.metrics.length : 'undefined');
 
             if (result.success) {
                 metricsData = result.metrics;
+                console.log('[DEBUG] metricsData 設定完了:', metricsData.length, '件');
                 renderMetricsTable();
             } else {
+                console.error('[DEBUG] API成功フラグがfalse');
                 tbody.innerHTML = '<tr><td colspan="14" class="text-center text-danger">評価指標の読み込みに失敗しました</td></tr>';
             }
         } catch (error) {
-            console.error('評価指標データ取得エラー:', error);
-            tbody.innerHTML = '<tr><td colspan="14" class="text-center text-danger">評価指標の読み込みに失敗しました</td></tr>';
+            console.error('[DEBUG] 評価指標データ取得エラー:', error);
+            console.error('[DEBUG] エラー詳細:', error.message, error.stack);
+            tbody.innerHTML = '<tr><td colspan="14" class="text-center text-danger">評価指標の読み込みに失敗しました: ' + error.message + '</td></tr>';
         }
     }
 
     // 評価指標テーブルを描画
     function renderMetricsTable() {
+        console.log('[DEBUG] renderMetricsTable 開始');
         const tbody = document.getElementById('metrics-tbody');
+        console.log('[DEBUG] tbody要素:', tbody);
+        console.log('[DEBUG] metricsData件数:', metricsData.length);
 
         if (metricsData.length === 0) {
+            console.log('[DEBUG] データなし');
             tbody.innerHTML = '<tr><td colspan="14" class="text-center">評価指標データがありません</td></tr>';
             return;
         }
 
-        tbody.innerHTML = metricsData.map(m => `
+        console.log('[DEBUG] テーブル描画開始');
+        try {
+            tbody.innerHTML = metricsData.map(m => `
             <tr>
                 <td><strong>${m.ticker_symbol}</strong></td>
                 <td>${getSecurityName(m.ticker_symbol)}</td>
@@ -603,6 +620,12 @@
                 <td class="text-end">${formatPercentageMetrics(m.profit_margin)}</td>
             </tr>
         `).join('');
+            console.log('[DEBUG] テーブル描画完了');
+        } catch (error) {
+            console.error('[DEBUG] テーブル描画エラー:', error);
+            console.error('[DEBUG] エラー詳細:', error.message, error.stack);
+            tbody.innerHTML = '<tr><td colspan="14" class="text-center text-danger">テーブルの描画に失敗しました: ' + error.message + '</td></tr>';
+        }
     }
 
     // 銘柄名を取得（holdingsDataから）
@@ -614,14 +637,11 @@
     // 時価総額フォーマット
     function formatMarketCap(value, currency) {
         if (!value) return '-';
-        if (currency === 'JPY') {
-            if (value >= 1e12) return (value / 1e12).toFixed(2) + '兆円';
-            if (value >= 1e8) return (value / 1e8).toFixed(0) + '億円';
-        } else {
-            if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B ' + currency;
-            if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M ' + currency;
-        }
-        return value.toLocaleString() + ' ' + currency;
+        // すべての通貨で TN (Trillion), BN (Billion), MN (Million) - 小数点なし
+        if (value >= 1e12) return (value / 1e12).toFixed(0) + 'TN';
+        if (value >= 1e9) return (value / 1e9).toFixed(0) + 'BN';
+        if (value >= 1e6) return (value / 1e6).toFixed(0) + 'MN';
+        return value.toLocaleString();
     }
 
     // 小数フォーマット
@@ -634,7 +654,8 @@
     function formatPercentageMetrics(value) {
         if (value === null || value === undefined) return '-';
         const pct = value * 100;
-        return (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+        // 利益率の場合は+マークを付けない
+        return pct.toFixed(2) + '%';
     }
 
     // 52週レンジフォーマット
@@ -646,14 +667,11 @@
     // 売上フォーマット
     function formatRevenue(value, currency) {
         if (!value) return '-';
-        if (currency === 'JPY') {
-            if (value >= 1e12) return (value / 1e12).toFixed(2) + '兆円';
-            if (value >= 1e8) return (value / 1e8).toFixed(0) + '億円';
-        } else {
-            if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B ' + currency;
-            if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M ' + currency;
-        }
-        return value.toLocaleString() + ' ' + currency;
+        // すべての通貨で TN (Trillion), BN (Billion), MN (Million) - 小数点なし
+        if (value >= 1e12) return (value / 1e12).toFixed(0) + 'TN';
+        if (value >= 1e9) return (value / 1e9).toFixed(0) + 'BN';
+        if (value >= 1e6) return (value / 1e6).toFixed(0) + 'MN';
+        return value.toLocaleString();
     }
 
     // リターンのクラス（正負で色分け）
