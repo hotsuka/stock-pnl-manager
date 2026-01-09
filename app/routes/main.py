@@ -16,6 +16,24 @@ def upload():
     return render_template('upload.html')
 
 
+@bp.route('/holdings')
+def holdings():
+    """Holdings page"""
+    return render_template('holdings.html')
+
+
+@bp.route('/realized-pnl')
+def realized_pnl():
+    """Realized P&L (Sold Securities) page"""
+    return render_template('realized_pnl.html')
+
+
+@bp.route('/dividends')
+def dividends():
+    """Dividends page"""
+    return render_template('dividends.html')
+
+
 @bp.route('/transactions')
 def transactions():
     """Transactions page"""

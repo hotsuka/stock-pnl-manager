@@ -89,14 +89,14 @@ stock-pnl-manager/
 
 - [x] Phase 0: 開発環境準備
 - [x] Phase 1: プロジェクト基盤構築
-- [ ] Phase 2: データベース実装
-- [ ] Phase 3: CSV取り込み機能
-- [ ] Phase 4: データ取得機能
-- [ ] Phase 5: 損益計算エンジン
-- [ ] Phase 6: REST API実装
-- [ ] Phase 7: フロントエンド実装
-- [ ] Phase 8: グラフ・可視化
-- [ ] Phase 9: テスト・最適化
+- [x] Phase 2: データベース実装
+- [x] Phase 3: CSV取り込み機能
+- [x] Phase 4: データ取得機能
+- [x] Phase 5: 損益計算エンジン
+- [x] Phase 6: REST API実装
+- [x] Phase 7: フロントエンド実装 (基本機能)
+- [/] Phase 8: グラフ・可視化
+- [/] Phase 9: テスト・最適化
 - [ ] Phase 10: ドキュメント・デプロイ
 
 ## ライセンス

@@ -144,20 +144,120 @@ def update_all_dividends():
 
 @bp.route('/dividends/summary', methods=['GET'])
 def get_dividend_summary():
-    """Get summary of all dividends"""
-    start_date = request.args.get('start')
-    end_date = request.args.get('end')
-    ticker = request.args.get('ticker')
+    """Get dividend summary by ticker with yearly breakdown"""
+    from decimal import Decimal
+    from collections import defaultdict
 
-    results = DividendFetcher.calculate_total_dividends(
-        ticker_symbol=ticker,
-        start_date=start_date,
-        end_date=end_date
+    # Get all dividends
+    dividends = Dividend.query.order_by(Dividend.ticker_symbol, Dividend.ex_dividend_date).all()
+
+    # Group dividends by ticker
+    ticker_dividends = defaultdict(list)
+    for div in dividends:
+        ticker_dividends[div.ticker_symbol].append(div)
+
+    # Get all transactions to get security names and calculate total investment
+    transactions = Transaction.query.all()
+
+    # Build ticker info map
+    ticker_info = {}
+    for t in transactions:
+        if t.ticker_symbol not in ticker_info:
+            ticker_info[t.ticker_symbol] = {
+                'security_name': t.security_name,
+                'total_investment': Decimal('0')
+            }
+
+        # Calculate total investment (all purchases in JPY)
+        if t.transaction_type == 'BUY':
+            ticker_info[t.ticker_symbol]['total_investment'] += t.settlement_amount
+
+    # Aggregate dividend data
+    dividend_summary = []
+    total_all_dividends = Decimal('0')
+    yearly_totals = defaultdict(lambda: Decimal('0'))
+
+    for ticker_symbol, divs in ticker_dividends.items():
+        if ticker_symbol not in ticker_info:
+            continue
+
+        total_dividends = Decimal('0')
+        yearly_dividends = defaultdict(lambda: Decimal('0'))
+
+        for div in divs:
+            div_amount = Decimal(str(div.total_dividend)) if div.total_dividend else Decimal('0')
+            total_dividends += div_amount
+
+            # Group by year (2022 and earlier combined as "2022年以前")
+            year = div.ex_dividend_date.year
+            if year <= 2022:
+                yearly_dividends['2022年以前'] += div_amount
+            else:
+                yearly_dividends[year] += div_amount
+
+        # Calculate dividend yield
+        total_investment = ticker_info[ticker_symbol]['total_investment']
+        dividend_yield = (total_dividends / total_investment * 100) if total_investment > 0 else Decimal('0')
+
+        # Add to totals
+        total_all_dividends += total_dividends
+        for year, amount in yearly_dividends.items():
+            yearly_totals[year] += amount
+
+        # Sort years: numeric years descending, then "2022年以前" at the end
+        sorted_years = []
+        pre_2022_amount = None
+        for year, amount in yearly_dividends.items():
+            if year == '2022年以前':
+                pre_2022_amount = ('2022年以前', amount)
+            else:
+                sorted_years.append((year, amount))
+
+        sorted_years.sort(key=lambda x: x[0], reverse=True)
+        if pre_2022_amount:
+            sorted_years.append(pre_2022_amount)
+
+        dividend_summary.append({
+            'ticker_symbol': ticker_symbol,
+            'security_name': ticker_info[ticker_symbol]['security_name'],
+            'total_dividends': float(total_dividends),
+            'total_investment': float(total_investment),
+            'dividend_yield': float(dividend_yield),
+            'yearly_dividends': {str(year): float(amount) for year, amount in sorted_years}
+        })
+
+    # Sort by ticker symbol
+    dividend_summary.sort(key=lambda x: x['ticker_symbol'])
+
+    # Calculate overall dividend yield
+    total_investment_all = sum(
+        ticker_info[ticker]['total_investment']
+        for ticker in ticker_info.keys()
     )
+    overall_dividend_yield = (total_all_dividends / total_investment_all * 100) if total_investment_all > 0 else Decimal('0')
+
+    # Sort yearly totals: numeric years descending, then "2022年以前" at the end
+    sorted_yearly_totals = []
+    pre_2022_total = None
+    for year, amount in yearly_totals.items():
+        if year == '2022年以前':
+            pre_2022_total = ('2022年以前', amount)
+        else:
+            sorted_yearly_totals.append((year, amount))
+
+    sorted_yearly_totals.sort(key=lambda x: x[0], reverse=True)
+    if pre_2022_total:
+        sorted_yearly_totals.append(pre_2022_total)
 
     return jsonify({
         'success': True,
-        'summary': results
+        'dividends': dividend_summary,
+        'totals': {
+            'total_dividends': float(total_all_dividends),
+            'total_investment': float(total_investment_all),
+            'dividend_yield': float(overall_dividend_yield),
+            'yearly_totals': {str(year): float(amount) for year, amount in sorted_yearly_totals}
+        }
     })
 
 
