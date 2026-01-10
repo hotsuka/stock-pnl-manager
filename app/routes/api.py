@@ -1139,6 +1139,7 @@ def health_check():
     """ヘルスチェックエンドポイント"""
     from datetime import datetime
     from app import db
+    from sqlalchemy import text
 
     health_status = {
         'status': 'healthy',
@@ -1149,7 +1150,7 @@ def health_check():
 
     # データベース接続チェック
     try:
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         health_status['checks']['database'] = {
             'status': 'healthy',
             'message': 'Database connection successful'
