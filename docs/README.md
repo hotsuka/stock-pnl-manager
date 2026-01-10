@@ -51,16 +51,20 @@
 プロジェクトルートにも重要なドキュメントがあります：
 
 - **[../README.md](../README.md)** - プロジェクト概要
-- **[../PHASE_12_DOCUMENTATION_DEPLOY.md](../PHASE_12_DOCUMENTATION_DEPLOY.md)** - Phase 12実装計画
+- **[../DOCKER.md](../DOCKER.md)** - Docker利用ガイド
+- **[../FOLDER_STRUCTURE.md](../FOLDER_STRUCTURE.md)** - フォルダ構成説明
 
-## Phase別の技術ドキュメント
+## 開発履歴ドキュメント
 
-各フェーズの実装詳細：
+各フェーズの実装詳細（`dev/`ディレクトリ）：
 
-- **[../PHASE_10_STOCK_METRICS.md](../PHASE_10_STOCK_METRICS.md)** - 株式評価指標機能
-- **[../PHASE_11_BENCHMARK_COMPARISON.md](../PHASE_11_BENCHMARK_COMPARISON.md)** - ベンチマーク比較機能
-- **[../ERROR_HANDLING.md](../ERROR_HANDLING.md)** - エラーハンドリング
-- **[../PERFORMANCE_OPTIMIZATION.md](../PERFORMANCE_OPTIMIZATION.md)** - パフォーマンス最適化
+- **[dev/PHASE_10_STOCK_METRICS.md](dev/PHASE_10_STOCK_METRICS.md)** - 株式評価指標機能
+- **[dev/PHASE_11_BENCHMARK_COMPARISON.md](dev/PHASE_11_BENCHMARK_COMPARISON.md)** - ベンチマーク比較機能
+- **[dev/PHASE_12_DOCUMENTATION_DEPLOY.md](dev/PHASE_12_DOCUMENTATION_DEPLOY.md)** - Phase 12実装計画
+- **[dev/PHASE_12_SUMMARY.md](dev/PHASE_12_SUMMARY.md)** - Phase 12完了サマリー
+- **[dev/ERROR_HANDLING.md](dev/ERROR_HANDLING.md)** - エラーハンドリング
+- **[dev/PERFORMANCE_OPTIMIZATION.md](dev/PERFORMANCE_OPTIMIZATION.md)** - パフォーマンス最適化
+- その他の技術ドキュメント
 
 ## ドキュメントの更新
 
@@ -84,4 +88,4 @@
 
 ---
 
-**最終更新**: 2026-01-10
+**最終更新**: 2026-01-11

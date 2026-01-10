@@ -233,14 +233,52 @@ stock-pnl-manager/
 │   └── test_stock_metrics.py
 ├── migrations/              # データベースマイグレーション
 ├── data/                    # データファイル
-│   ├── stock_pnl.db        # SQLiteデータベース
-│   └── uploads/            # アップロードファイル
+│   ├── stock_pnl.db        # SQLiteデータベース (gitignore)
+│   ├── uploads/            # アップロードファイル (gitignore)
+│   ├── sample_transactions.csv      # サンプルCSV（日本語）
+│   └── sample_transactions_en.csv   # サンプルCSV（英語）
 ├── docs/                    # ドキュメント
+│   ├── README.md           # ドキュメント目次
+│   ├── USER_GUIDE.md       # ユーザーガイド
+│   ├── DEVELOPER_GUIDE.md  # 開発者ガイド（本ファイル）
+│   ├── FAQ.md              # よくある質問
+│   ├── DEPLOYMENT.md       # デプロイガイド
+│   ├── MONITORING.md       # 監視・運用ガイド
+│   └── dev/                # 開発履歴ドキュメント
+│       ├── PHASE_10_STOCK_METRICS.md
+│       ├── PHASE_11_BENCHMARK_COMPARISON.md
+│       ├── PHASE_12_DOCUMENTATION_DEPLOY.md
+│       ├── PHASE_12_SUMMARY.md
+│       ├── ERROR_HANDLING.md
+│       ├── PERFORMANCE_OPTIMIZATION.md
+│       └── その他の技術ドキュメント
 ├── scripts/                 # 運用スクリプト
+│   ├── backup_database.py   # データベースバックアップ
+│   ├── restore_database.py  # データベース復元
+│   ├── update_all_data.py   # 全データ更新
+│   ├── cleanup_old_data.py  # 古いデータクリーンアップ
+│   ├── init_db.py           # データベース初期化
+│   ├── recalculate_all.py   # 全データ再計算
+│   ├── update_dividends.py  # 配当データ更新
+│   ├── update_metrics_returns.py  # 評価指標更新
+│   ├── update_prices_manual.py    # 株価手動更新
+│   ├── start_production.sh  # 本番起動スクリプト（Linux/macOS）
+│   └── start_production.bat # 本番起動スクリプト（Windows）
+├── .github/                 # GitHub Actions設定
+│   └── workflows/
+│       ├── test.yml        # テスト自動化
+│       └── docker.yml      # Docker自動ビルド
 ├── config.py               # 設定ファイル
 ├── run.py                  # 起動スクリプト
 ├── requirements.txt        # 依存パッケージ
 ├── .env.example            # 環境変数サンプル
+├── .gitignore              # Git除外設定
+├── Dockerfile              # Dockerイメージ設定
+├── docker-compose.yml      # Docker開発環境
+├── docker-compose.prod.yml # Docker本番環境
+├── .dockerignore           # Docker除外設定
+├── DOCKER.md               # Docker利用ガイド
+├── FOLDER_STRUCTURE.md     # フォルダ構成説明
 └── README.md               # プロジェクト概要
 ```
 
