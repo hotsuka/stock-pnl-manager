@@ -1,0 +1,2231 @@
+openapi: 3.0.0
+info:
+  title: Stock P&L Manager API
+  description: |
+    株式投資ポートフォリオ管理システムのREST API仕様
+
+    ## 機能概要
+    - 株価取得・管理
+    - 為替レート管理
+    - 配当データ管理
+    - 保有銘柄管理
+    - 取引履歴管理
+    - 実現損益管理
+    - ダッシュボード・統計
+    - 損益推移分析
+    - 株式評価指標管理
+
+    ## 認証
+    現在のバージョンでは認証は実装されていません。
+
+    ## データ形式
+    - リクエスト/レスポンス: JSON
+    - 日付形式: YYYY-MM-DD
+    - 日時形式: ISO 8601 (YYYY-MM-DDTHH:mm:ss)
+
+    ## エラーレスポンス
+    全てのエラーレスポンスは以下の形式に従います:
+    ```json
+    {
+      "success": false,
+      "error": "エラーメッセージ"
+    }
+    ```
+  version: 1.0.0
+  contact:
+    name: API Support
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:5000/api
+    description: 開発環境
+  - url: /api
+    description: 相対パス
+
+tags:
+  - name: 株価
+    description: 株価取得・更新API
+  - name: 為替レート
+    description: 為替レート取得・変換API
+  - name: 配当
+    description: 配当データ管理API
+  - name: 保有銘柄
+    description: 保有銘柄管理API
+  - name: 取引履歴
+    description: 取引履歴管理API
+  - name: 実現損益
+    description: 実現損益照会API
+  - name: ダッシュボード
+    description: ダッシュボード・統計API
+  - name: 損益推移
+    description: 損益推移分析API
+  - name: 株式評価指標
+    description: 株式評価指標API
+
+paths:
+  # ============================================================
+  # 株価API
+  # ============================================================
+  /stock-price/{ticker}:
+    get:
+      tags:
+        - 株価
+      summary: 株価取得
+      description: 指定したティッカーシンボルの現在株価を取得します
+      operationId: getStockPrice
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: ティッカーシンボル (例 AAPL, 9984.T, 005930.KS)
+          schema:
+            type: string
+            example: AAPL
+        - name: cache
+          in: query
+          required: false
+          description: キャッシュ使用フラグ
+          schema:
+            type: string
+            enum: [true, false]
+            default: true
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockPriceResponse'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: ティッカーシンボルが指定されていません
+        '404':
+          description: データ未取得
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: '株価データを取得できませんでした: INVALID'
+        '503':
+          description: API呼び出しエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: '株価の取得中にエラーが発生しました: Connection timeout'
+
+  /stock-price/update-all:
+    post:
+      tags:
+        - 株価
+      summary: 全保有銘柄の株価一括更新
+      description: 全保有銘柄の株価を一括更新します
+      operationId: updateAllStockPrices
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkUpdateResponse'
+        '503':
+          description: サービス利用不可
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # 為替レートAPI
+  # ============================================================
+  /exchange-rate/multiple:
+    get:
+      tags:
+        - 為替レート
+      summary: 複数通貨レート取得
+      description: 複数通貨の為替レートを一括取得します
+      operationId: getMultipleExchangeRates
+      parameters:
+        - name: currencies
+          in: query
+          required: false
+          description: カンマ区切りの通貨コード
+          schema:
+            type: string
+            default: USD,KRW
+            example: USD,EUR,GBP
+        - name: to
+          in: query
+          required: false
+          description: 変換先通貨
+          schema:
+            type: string
+            default: JPY
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MultipleExchangeRatesResponse'
+
+  /exchange-rate/{from_currency}:
+    get:
+      tags:
+        - 為替レート
+      summary: 為替レート取得
+      description: 指定した通貨ペアの為替レートを取得します
+      operationId: getExchangeRate
+      parameters:
+        - name: from_currency
+          in: path
+          required: true
+          description: 変換元通貨コード
+          schema:
+            type: string
+            example: USD
+        - name: to
+          in: query
+          required: false
+          description: 変換先通貨コード
+          schema:
+            type: string
+            default: JPY
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeRateResponse'
+        '404':
+          description: データ未取得
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /exchange-rate/convert:
+    post:
+      tags:
+        - 為替レート
+      summary: 通貨変換
+      description: 金額を指定した通貨間で変換します
+      operationId: convertCurrency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurrencyConversionRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrencyConversionResponse'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '503':
+          description: サービス利用不可
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # 配当API
+  # ============================================================
+  /dividends/{ticker}:
+    get:
+      tags:
+        - 配当
+      summary: 配当履歴取得
+      description: 指定したティッカーの配当履歴を取得します
+      operationId: getDividendHistory
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: ティッカーシンボル
+          schema:
+            type: string
+            example: AAPL
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendHistoryResponse'
+
+  /dividends/fetch/{ticker}:
+    post:
+      tags:
+        - 配当
+      summary: 配当データ取得・保存
+      description: 外部APIから配当データを取得してDBに保存します
+      operationId: fetchDividends
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: ティッカーシンボル
+          schema:
+            type: string
+            example: AAPL
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendFetchResponse'
+
+  /dividends/update-all:
+    post:
+      tags:
+        - 配当
+      summary: 全保有銘柄の配当データ更新
+      description: 全保有銘柄の配当データを一括更新します
+      operationId: updateAllDividends
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendBulkUpdateResponse'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /dividends/summary:
+    get:
+      tags:
+        - 配当
+      summary: 配当サマリー取得
+      description: 全銘柄の配当サマリーを年度別に集計して取得します
+      operationId: getDividendSummary
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DividendSummaryResponse'
+
+  # ============================================================
+  # 保有銘柄API
+  # ============================================================
+  /holdings:
+    get:
+      tags:
+        - 保有銘柄
+      summary: 全保有銘柄取得
+      description: 全保有銘柄のリストを取得します
+      operationId: getAllHoldings
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldingsListResponse'
+
+  /holdings/{ticker}:
+    get:
+      tags:
+        - 保有銘柄
+      summary: 保有銘柄詳細取得
+      description: 指定したティッカーの保有銘柄詳細を取得します
+      operationId: getHoldingDetail
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: ティッカーシンボル
+          schema:
+            type: string
+            example: AAPL
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldingDetailResponse'
+        '404':
+          description: 保有銘柄が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - 保有銘柄
+      summary: 保有銘柄削除
+      description: |
+        指定した保有銘柄と関連データを削除します
+
+        **注意**: この操作により以下のデータが削除されます
+        - 保有銘柄レコード
+        - 関連する全取引履歴
+        - 関連する全配当データ
+        - 関連する全実現損益レコード
+      operationId: deleteHolding
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: ティッカーシンボル
+          schema:
+            type: string
+            example: AAPL
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldingDeleteResponse'
+        '404':
+          description: 保有銘柄が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # 取引履歴API
+  # ============================================================
+  /transactions:
+    get:
+      tags:
+        - 取引履歴
+      summary: 取引履歴一覧取得
+      description: 取引履歴のリストを取得します
+      operationId: getTransactions
+      parameters:
+        - name: ticker
+          in: query
+          required: false
+          description: ティッカーシンボルでフィルタ
+          schema:
+            type: string
+            example: AAPL
+        - name: limit
+          in: query
+          required: false
+          description: 取得件数の上限
+          schema:
+            type: integer
+            minimum: 1
+            example: 10
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsListResponse'
+
+  /transactions/{transaction_id}:
+    get:
+      tags:
+        - 取引履歴
+      summary: 取引詳細取得
+      description: 指定したIDの取引詳細を取得します
+      operationId: getTransactionDetail
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          description: 取引ID
+          schema:
+            type: integer
+            example: 123
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionDetailResponse'
+        '404':
+          description: 取引が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - 取引履歴
+      summary: 取引更新
+      description: |
+        指定したIDの取引情報を更新します
+
+        **注意**:
+        - 取引更新後、関連する保有銘柄データが自動的に再計算されます
+        - レスポンスの `affected_tickers` に影響を受けた銘柄のリストが含まれます
+      operationId: updateTransaction
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          description: 取引ID
+          schema:
+            type: integer
+            example: 123
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionUpdateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionUpdateResponse'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '404':
+          description: 取引が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /transactions/delete:
+    post:
+      tags:
+        - 取引履歴
+      summary: 取引削除
+      description: |
+        指定したIDの取引を削除します
+
+        **注意**:
+        - 削除後、影響を受けた銘柄の保有データが自動的に再計算されます
+        - すべての保有数量が0になった銘柄は保有銘柄リストに残ります（削除されません）
+      operationId: deleteTransactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionDeleteRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionDeleteResponse'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # 実現損益API
+  # ============================================================
+  /realized-pnl:
+    get:
+      tags:
+        - 実現損益
+      summary: 実現損益一覧取得
+      description: 全銘柄の実現損益データを銘柄別に集計して取得します
+      operationId: getRealizedPnl
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealizedPnlListResponse'
+
+  # ============================================================
+  # ダッシュボードAPI
+  # ============================================================
+  /dashboard/summary:
+    get:
+      tags:
+        - ダッシュボード
+      summary: ダッシュボードサマリー取得
+      description: ダッシュボード用の投資サマリーデータを取得します
+      operationId: getDashboardSummary
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummaryResponse'
+
+  /dashboard/portfolio-composition:
+    get:
+      tags:
+        - ダッシュボード
+      summary: ポートフォリオ構成取得
+      description: |
+        ポートフォリオの構成比データを取得します（円グラフ用）
+
+        **注意**:
+        - 評価額が0より大きい銘柄のみ返却されます
+        - 全銘柄の評価額がJPY換算されています
+      operationId: getPortfolioComposition
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioCompositionResponse'
+
+  /dashboard/pnl-history:
+    get:
+      tags:
+        - ダッシュボード
+      summary: 損益履歴取得（レガシー）
+      description: |
+        損益推移データを取得します
+
+        **注意**: このエンドポイントはレガシー版です。新しい実装は `/api/performance/history` を使用してください
+      operationId: getPnlHistory
+      deprecated: true
+      parameters:
+        - name: period
+          in: query
+          required: false
+          description: 期間
+          schema:
+            type: string
+            enum: [30d, 1y, all]
+            default: 30d
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PnlHistoryResponse'
+
+  /dashboard/yearly-stats:
+    get:
+      tags:
+        - ダッシュボード
+      summary: 年度別統計取得
+      description: 年度別の実現損益統計を取得します
+      operationId: getYearlyStats
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/YearlyStatsResponse'
+
+  # ============================================================
+  # 損益推移API
+  # ============================================================
+  /performance/history:
+    get:
+      tags:
+        - 損益推移
+      summary: 損益推移履歴取得
+      description: 投資損益の推移履歴をベンチマーク比較データとともに取得します
+      operationId: getPerformanceHistory
+      parameters:
+        - name: period
+          in: query
+          required: false
+          description: 期間
+          schema:
+            type: string
+            enum: [1m, 1y]
+            default: 1m
+        - name: benchmarks
+          in: query
+          required: false
+          description: ベンチマーク比較を含めるか
+          schema:
+            type: string
+            enum: [true, false]
+            default: true
+        - name: benchmark_keys
+          in: query
+          required: false
+          description: ベンチマーク指標（複数指定可能）
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [TOPIX, SP500, NIKKEI225]
+            default: [TOPIX, SP500]
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceHistoryResponse'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailedErrorResponse'
+
+  /performance/detail:
+    get:
+      tags:
+        - 損益推移
+      summary: 日別詳細取得
+      description: 指定日のポートフォリオ詳細（銘柄別内訳）を取得します
+      operationId: getPerformanceDetail
+      parameters:
+        - name: date
+          in: query
+          required: true
+          description: 日付（YYYY-MM-DD形式）
+          schema:
+            type: string
+            format: date
+            example: '2026-01-10'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceDetailResponse'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: サーバーエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailedErrorResponse'
+
+  # ============================================================
+  # 株式評価指標API
+  # ============================================================
+  /holdings/metrics:
+    get:
+      tags:
+        - 株式評価指標
+      summary: 全保有銘柄の評価指標取得
+      description: 全保有銘柄の株式評価指標を取得します
+      operationId: getHoldingsMetrics
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldingsMetricsResponse'
+        '503':
+          description: サービス利用不可
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /stock-metrics/update-all:
+    post:
+      tags:
+        - 株式評価指標
+      summary: 全保有銘柄の評価指標更新
+      description: 全保有銘柄の株式評価指標を外部APIから取得・更新します
+      operationId: updateAllStockMetrics
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsUpdateResponse'
+        '503':
+          description: サービス利用不可
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+# ============================================================
+# コンポーネント定義
+# ============================================================
+components:
+  schemas:
+    # ============================================================
+    # 基本スキーマ
+    # ============================================================
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: エラーメッセージ
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: バリデーションエラー
+        field:
+          type: string
+          example: amount
+        value:
+          oneOf:
+            - type: string
+            - type: number
+          example: -100
+        missing_fields:
+          type: array
+          items:
+            type: string
+          example: [amount, from]
+
+    DetailedErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+        detail:
+          type: string
+        traceback:
+          type: string
+
+    # ============================================================
+    # 株価スキーマ
+    # ============================================================
+    StockPriceData:
+      type: object
+      properties:
+        ticker:
+          type: string
+          example: AAPL
+        current_price:
+          type: number
+          format: double
+          example: 182.45
+        previous_close:
+          type: number
+          format: double
+          example: 180.20
+        day_change:
+          type: number
+          format: double
+          example: 2.25
+        day_change_pct:
+          type: number
+          format: double
+          example: 1.25
+        currency:
+          type: string
+          example: USD
+        last_updated:
+          type: string
+          format: date-time
+          example: '2026-01-10T14:30:00'
+
+    StockPriceResponse:
+      type: object
+      required:
+        - success
+        - ticker
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        ticker:
+          type: string
+          example: AAPL
+        data:
+          $ref: '#/components/schemas/StockPriceData'
+
+    BulkUpdateDetail:
+      type: object
+      properties:
+        ticker:
+          type: string
+          example: AAPL
+        success:
+          type: boolean
+          example: true
+        price:
+          type: number
+          format: double
+          example: 182.45
+        error:
+          type: string
+          example: 株価データを取得できませんでした
+
+    BulkUpdateResponse:
+      type: object
+      required:
+        - success
+        - results
+      properties:
+        success:
+          type: boolean
+          example: true
+        results:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 15
+            success:
+              type: integer
+              example: 14
+            failed:
+              type: integer
+              example: 1
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/BulkUpdateDetail'
+
+    # ============================================================
+    # 為替レートスキーマ
+    # ============================================================
+    ExchangeRateData:
+      type: object
+      properties:
+        from:
+          type: string
+          example: USD
+        to:
+          type: string
+          example: JPY
+        rate:
+          type: number
+          format: double
+          example: 149.50
+        last_updated:
+          type: string
+          format: date-time
+          example: '2026-01-10T10:00:00'
+
+    ExchangeRateResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/ExchangeRateData'
+
+    MultipleExchangeRatesResponse:
+      type: object
+      required:
+        - success
+        - rates
+        - to_currency
+      properties:
+        success:
+          type: boolean
+          example: true
+        rates:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ExchangeRateData'
+        to_currency:
+          type: string
+          example: JPY
+
+    CurrencyConversionRequest:
+      type: object
+      required:
+        - amount
+        - from
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          example: 1000.00
+          description: 変換する金額（正の数値）
+        from:
+          type: string
+          example: USD
+          description: 変換元通貨コード
+        to:
+          type: string
+          default: JPY
+          example: JPY
+          description: 変換先通貨コード
+
+    CurrencyConversionData:
+      type: object
+      properties:
+        from_amount:
+          type: number
+          format: double
+          example: 1000.00
+        from_currency:
+          type: string
+          example: USD
+        to_amount:
+          type: number
+          format: double
+          example: 149500.00
+        to_currency:
+          type: string
+          example: JPY
+        exchange_rate:
+          type: number
+          format: double
+          example: 149.50
+        converted_at:
+          type: string
+          format: date-time
+          example: '2026-01-10T10:00:00'
+
+    CurrencyConversionResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/CurrencyConversionData'
+
+    # ============================================================
+    # 配当スキーマ
+    # ============================================================
+    DividendRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        ticker_symbol:
+          type: string
+          example: AAPL
+        ex_dividend_date:
+          type: string
+          format: date
+          example: '2025-11-08'
+        payment_date:
+          type: string
+          format: date
+          example: '2025-11-14'
+        dividend_amount:
+          type: number
+          format: double
+          example: 0.24
+        currency:
+          type: string
+          example: USD
+        total_dividend:
+          type: number
+          format: double
+          example: 24.00
+        quantity_held:
+          type: number
+          format: double
+          example: 100.0
+        source:
+          type: string
+          example: yahoo
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-11-10T10:00:00'
+
+    DividendHistoryResponse:
+      type: object
+      required:
+        - success
+        - ticker
+        - count
+        - dividends
+      properties:
+        success:
+          type: boolean
+          example: true
+        ticker:
+          type: string
+          example: AAPL
+        count:
+          type: integer
+          example: 4
+        dividends:
+          type: array
+          items:
+            $ref: '#/components/schemas/DividendRecord'
+
+    DividendFetchResponse:
+      type: object
+      required:
+        - success
+        - results
+      properties:
+        success:
+          type: boolean
+          example: true
+        results:
+          type: object
+          properties:
+            ticker:
+              type: string
+              example: AAPL
+            new_records:
+              type: integer
+              example: 2
+            updated_records:
+              type: integer
+              example: 0
+            total_records:
+              type: integer
+              example: 12
+            source:
+              type: string
+              example: yahoo
+
+    DividendBulkUpdateDetail:
+      type: object
+      properties:
+        ticker:
+          type: string
+          example: AAPL
+        success:
+          type: boolean
+          example: true
+        new_records:
+          type: integer
+          example: 2
+        error:
+          type: string
+
+    DividendBulkUpdateResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          example: true
+        total_holdings:
+          type: integer
+          example: 15
+        success:
+          type: integer
+          example: 14
+        failed:
+          type: integer
+          example: 1
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/DividendBulkUpdateDetail'
+
+    DividendSummaryItem:
+      type: object
+      properties:
+        ticker_symbol:
+          type: string
+          example: AAPL
+        security_name:
+          type: string
+          example: Apple Inc.
+        total_dividends:
+          type: number
+          format: double
+          example: 15000.00
+          description: 総配当額（JPY換算）
+        total_investment:
+          type: number
+          format: double
+          example: 500000.00
+          description: 総投資額（JPY）
+        dividend_yield:
+          type: number
+          format: double
+          example: 3.00
+          description: 配当利回り（%）
+        yearly_dividends:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          example:
+            '2025': 8000.00
+            '2024': 5000.00
+            '2023': 2000.00
+
+    DividendTotals:
+      type: object
+      properties:
+        total_dividends:
+          type: number
+          format: double
+          example: 45000.00
+        total_investment:
+          type: number
+          format: double
+          example: 2000000.00
+        dividend_yield:
+          type: number
+          format: double
+          example: 2.25
+        yearly_totals:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          example:
+            '2025': 25000.00
+            '2024': 15000.00
+            '2023': 5000.00
+            '2022年以前': 0
+
+    DividendSummaryResponse:
+      type: object
+      required:
+        - success
+        - dividends
+        - totals
+      properties:
+        success:
+          type: boolean
+          example: true
+        dividends:
+          type: array
+          items:
+            $ref: '#/components/schemas/DividendSummaryItem'
+        totals:
+          $ref: '#/components/schemas/DividendTotals'
+
+    # ============================================================
+    # 保有銘柄スキーマ
+    # ============================================================
+    HoldingDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        ticker_symbol:
+          type: string
+          example: AAPL
+        security_name:
+          type: string
+          example: Apple Inc.
+        total_quantity:
+          type: number
+          format: double
+          example: 100.0
+        average_cost:
+          type: number
+          format: double
+          example: 150.00
+        currency:
+          type: string
+          enum: [JPY, USD, KRW]
+          example: USD
+        total_cost:
+          type: number
+          format: double
+          example: 15000.00
+        current_price:
+          type: number
+          format: double
+          example: 182.45
+        previous_close:
+          type: number
+          format: double
+          example: 180.20
+        day_change_pct:
+          type: number
+          format: double
+          example: 1.25
+        current_value:
+          type: number
+          format: double
+          example: 18245.00
+        unrealized_pnl:
+          type: number
+          format: double
+          example: 3245.00
+        unrealized_pnl_pct:
+          type: number
+          format: double
+          example: 21.63
+        last_updated:
+          type: string
+          format: date-time
+          example: '2026-01-10T14:30:00'
+        created_at:
+          type: string
+          format: date-time
+          example: '2024-01-15T10:00:00'
+
+    HoldingsListResponse:
+      type: object
+      required:
+        - success
+        - count
+        - holdings
+      properties:
+        success:
+          type: boolean
+          example: true
+        count:
+          type: integer
+          example: 15
+        holdings:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingDetail'
+
+    HoldingDetailResponse:
+      type: object
+      required:
+        - success
+        - holding
+      properties:
+        success:
+          type: boolean
+          example: true
+        holding:
+          $ref: '#/components/schemas/HoldingDetail'
+
+    HoldingDeleteResponse:
+      type: object
+      required:
+        - success
+        - message
+        - deleted
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: AAPL の保有銘柄と関連データを削除しました
+        deleted:
+          type: object
+          properties:
+            ticker:
+              type: string
+              example: AAPL
+            transactions:
+              type: integer
+              example: 12
+            dividends:
+              type: integer
+              example: 8
+            realized_pnl:
+              type: integer
+              example: 2
+
+    # ============================================================
+    # 取引履歴スキーマ
+    # ============================================================
+    TransactionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        transaction_date:
+          type: string
+          format: date
+          example: '2025-12-15'
+        ticker_symbol:
+          type: string
+          example: AAPL
+        security_name:
+          type: string
+          example: Apple Inc.
+        transaction_type:
+          type: string
+          enum: [BUY, SELL, 買付, 売却]
+          example: BUY
+        currency:
+          type: string
+          enum: [JPY, USD, KRW, 日本円]
+          example: USD
+        quantity:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          example: 50.0
+        unit_price:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          example: 180.50
+        commission:
+          type: number
+          format: double
+          minimum: 0
+          example: 10.00
+        settlement_amount:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          example: 9035.00
+        exchange_rate:
+          type: number
+          format: double
+          example: 149.50
+        settlement_currency:
+          type: string
+          example: JPY
+        created_at:
+          type: string
+          format: date-time
+          example: '2025-12-15T10:30:00'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2025-12-15T10:30:00'
+
+    TransactionsListResponse:
+      type: object
+      required:
+        - success
+        - count
+        - total_count
+        - transactions
+      properties:
+        success:
+          type: boolean
+          example: true
+        count:
+          type: integer
+          example: 10
+          description: 返却された取引件数
+        total_count:
+          type: integer
+          example: 125
+          description: フィルタ条件に一致する総取引件数
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionDetail'
+
+    TransactionDetailResponse:
+      type: object
+      required:
+        - success
+        - transaction
+      properties:
+        success:
+          type: boolean
+          example: true
+        transaction:
+          $ref: '#/components/schemas/TransactionDetail'
+
+    TransactionUpdateRequest:
+      type: object
+      properties:
+        transaction_date:
+          type: string
+          format: date
+          example: '2025-12-20'
+          description: 取引日（YYYY-MM-DD形式）
+        ticker_symbol:
+          type: string
+          example: AAPL
+          description: ティッカーシンボル
+        security_name:
+          type: string
+          example: Apple Inc.
+          description: 銘柄名
+        transaction_type:
+          type: string
+          enum: [BUY, SELL, 買付, 売却]
+          example: BUY
+          description: 取引タイプ
+        quantity:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          example: 60.0
+          description: 数量（正の数値）
+        unit_price:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          example: 175.00
+          description: 単価（正の数値）
+        commission:
+          type: number
+          format: double
+          minimum: 0
+          example: 12.00
+          description: 手数料（0以上）
+        settlement_amount:
+          type: number
+          format: double
+          minimum: 0
+          exclusiveMinimum: true
+          example: 10512.00
+          description: 受渡金額（正の数値）
+        currency:
+          type: string
+          enum: [JPY, USD, KRW, 日本円]
+          example: USD
+          description: 通貨コード
+
+    TransactionUpdateResponse:
+      type: object
+      required:
+        - success
+        - message
+        - transaction
+        - affected_tickers
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: 取引を更新しました
+        transaction:
+          $ref: '#/components/schemas/TransactionDetail'
+        affected_tickers:
+          type: array
+          items:
+            type: string
+          example: [AAPL]
+
+    TransactionDeleteRequest:
+      type: object
+      required:
+        - transaction_ids
+      properties:
+        transaction_ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+          example: [123, 124, 125]
+          description: 削除する取引IDの配列
+
+    TransactionDeleteResponse:
+      type: object
+      required:
+        - success
+        - message
+        - deleted_count
+        - affected_tickers
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: 3件の取引を削除しました
+        deleted_count:
+          type: integer
+          example: 3
+        affected_tickers:
+          type: array
+          items:
+            type: string
+          example: [AAPL, MSFT]
+
+    # ============================================================
+    # 実現損益スキーマ
+    # ============================================================
+    RealizedPnlItem:
+      type: object
+      properties:
+        ticker_symbol:
+          type: string
+          example: AAPL
+        security_name:
+          type: string
+          example: Apple Inc.
+        total_quantity:
+          type: number
+          format: double
+          example: 150.0
+          description: 売却した総数量
+        average_cost:
+          type: number
+          format: double
+          example: 145.50
+          description: 売却時の平均取得単価（株式の通貨）
+        sale_unit_price:
+          type: number
+          format: double
+          example: 180.25
+          description: 平均売却単価（株式の通貨）
+        total_cost:
+          type: number
+          format: double
+          example: 21825.00
+          description: 総取得コスト（JPY換算）
+        sale_proceeds:
+          type: number
+          format: double
+          example: 27037.50
+          description: 売却代金（JPY換算）
+        realized_pnl:
+          type: number
+          format: double
+          example: 5212.50
+          description: 確定損益（JPY）
+        realized_pnl_pct:
+          type: number
+          format: double
+          example: 23.88
+          description: 確定損益率（%）
+        currency:
+          type: string
+          enum: [JPY, USD, KRW]
+          example: USD
+          description: 株式の通貨（表示単価の通貨）
+
+    RealizedPnlListResponse:
+      type: object
+      required:
+        - success
+        - count
+        - realized_pnl
+      properties:
+        success:
+          type: boolean
+          example: true
+        count:
+          type: integer
+          example: 8
+        realized_pnl:
+          type: array
+          items:
+            $ref: '#/components/schemas/RealizedPnlItem'
+
+    # ============================================================
+    # ダッシュボードスキーマ
+    # ============================================================
+    TickerCounts:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 20
+          description: 投資実績のある総銘柄数（保有中 + 売却済み）
+        active:
+          type: integer
+          example: 15
+          description: 現在保有中の銘柄数
+        realized:
+          type: integer
+          example: 5
+          description: 売却済み（保有なし）の銘柄数
+
+    Investment:
+      type: object
+      properties:
+        total:
+          type: number
+          format: double
+          example: 2500000.00
+          description: 総投資額（JPY）
+        holdings:
+          type: number
+          format: double
+          example: 2000000.00
+          description: 現在保有分の投資額（JPY）
+        realized:
+          type: number
+          format: double
+          example: 500000.00
+          description: 売却済み分の投資額（JPY）
+
+    Evaluation:
+      type: object
+      properties:
+        total:
+          type: number
+          format: double
+          example: 2875000.00
+          description: 総評価額（JPY）
+        holdings:
+          type: number
+          format: double
+          example: 2350000.00
+          description: 保有銘柄の現在評価額（JPY）
+        realized:
+          type: number
+          format: double
+          example: 480000.00
+          description: 売却済み代金（JPY）
+        dividends:
+          type: number
+          format: double
+          example: 45000.00
+          description: 配当総額（JPY）
+
+    TotalPnl:
+      type: object
+      properties:
+        amount:
+          type: number
+          format: double
+          example: 375000.00
+          description: 総合損益額（JPY）
+        percentage:
+          type: number
+          format: double
+          example: 15.00
+          description: 総合損益率（%）
+
+    DashboardSummary:
+      type: object
+      properties:
+        ticker_counts:
+          $ref: '#/components/schemas/TickerCounts'
+        investment:
+          $ref: '#/components/schemas/Investment'
+        evaluation:
+          $ref: '#/components/schemas/Evaluation'
+        total_pnl:
+          $ref: '#/components/schemas/TotalPnl'
+        currency:
+          type: string
+          example: JPY
+
+    DashboardSummaryResponse:
+      type: object
+      required:
+        - success
+        - summary
+      properties:
+        success:
+          type: boolean
+          example: true
+        summary:
+          $ref: '#/components/schemas/DashboardSummary'
+
+    PortfolioCompositionItem:
+      type: object
+      properties:
+        ticker:
+          type: string
+          example: AAPL
+        name:
+          type: string
+          example: Apple Inc.
+        value:
+          type: number
+          format: double
+          example: 450000.00
+          description: 評価額（JPY換算）
+        percentage:
+          type: number
+          format: double
+          example: 0
+          description: 構成比率（%）- フロントエンド側で計算
+
+    PortfolioCompositionResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortfolioCompositionItem'
+
+    PnlHistoryDataPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: '2025-12-15'
+        pnl:
+          type: number
+          format: double
+          example: 12500.00
+          description: 当日までの累積実現損益（JPY）
+
+    PnlHistoryResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PnlHistoryDataPoint'
+
+    YearlyStatItem:
+      type: object
+      properties:
+        year:
+          type: string
+          example: '2025'
+          description: 年度（または"合計"）
+        total_cost:
+          type: number
+          format: double
+          example: 800000.00
+          description: 総取得コスト（JPY）
+        total_proceeds:
+          type: number
+          format: double
+          example: 920000.00
+          description: 総売却代金（JPY）
+        realized_pnl:
+          type: number
+          format: double
+          example: 120000.00
+          description: 確定損益（JPY）
+        pnl_pct:
+          type: number
+          format: double
+          example: 15.00
+          description: 確定損益率（%）
+
+    YearlyStatsResponse:
+      type: object
+      required:
+        - success
+        - yearly_stats
+        - total
+      properties:
+        success:
+          type: boolean
+          example: true
+        yearly_stats:
+          type: array
+          items:
+            $ref: '#/components/schemas/YearlyStatItem'
+        total:
+          $ref: '#/components/schemas/YearlyStatItem'
+
+    # ============================================================
+    # 損益推移スキーマ
+    # ============================================================
+    PortfolioDataPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          example: '2025-12-11'
+          description: 日付（日次 YYYY-MM-DD、月次 YYYY-MM）
+        total_value:
+          type: number
+          format: double
+          example: 2000000.00
+          description: 総評価額（JPY）
+        total_cost:
+          type: number
+          format: double
+          example: 1950000.00
+          description: 総投資額（JPY）
+        unrealized_pnl:
+          type: number
+          format: double
+          example: 50000.00
+          description: 未実現損益（JPY）
+        realized_pnl:
+          type: number
+          format: double
+          example: 0.00
+          description: 実現損益（JPY）
+        dividends:
+          type: number
+          format: double
+          example: 0.00
+          description: 配当額（JPY）
+        total_pnl:
+          type: number
+          format: double
+          example: 50000.00
+          description: 総損益（JPY）= 未実現 + 実現 + 配当
+        total_return_pct:
+          type: number
+          format: double
+          example: 2.56
+          description: 総合リターン率（%）
+
+    BenchmarkDataPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          example: '2025-12-11'
+          description: 日付
+        value:
+          type: number
+          format: double
+          example: 2650.50
+          description: ベンチマーク指数値
+        return_pct:
+          type: number
+          format: double
+          example: 0.00
+          description: 期間開始日からのリターン率（%）
+
+    PerformanceData:
+      type: object
+      properties:
+        portfolio:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortfolioDataPoint'
+        benchmarks:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/BenchmarkDataPoint'
+
+    PerformanceHistoryResponse:
+      type: object
+      required:
+        - success
+        - period
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        period:
+          type: string
+          enum: [1m, 1y]
+          example: 1m
+        data:
+          $ref: '#/components/schemas/PerformanceData'
+
+    HoldingDetailItem:
+      type: object
+      properties:
+        ticker_symbol:
+          type: string
+          example: AAPL
+        security_name:
+          type: string
+          example: Apple Inc.
+        quantity:
+          type: number
+          format: double
+          example: 100.0
+        average_cost:
+          type: number
+          format: double
+          example: 150.00
+        current_price:
+          type: number
+          format: double
+          example: 182.45
+        current_value:
+          type: number
+          format: double
+          example: 18245.00
+        unrealized_pnl:
+          type: number
+          format: double
+          example: 3245.00
+        unrealized_pnl_pct:
+          type: number
+          format: double
+          example: 21.63
+        currency:
+          type: string
+          enum: [JPY, USD, KRW]
+          example: USD
+
+    PerformanceSummary:
+      type: object
+      properties:
+        total_value:
+          type: number
+          format: double
+          example: 2350000.00
+        total_cost:
+          type: number
+          format: double
+          example: 2000000.00
+        total_unrealized_pnl:
+          type: number
+          format: double
+          example: 350000.00
+        total_realized_pnl:
+          type: number
+          format: double
+          example: 70000.00
+        total_dividends:
+          type: number
+          format: double
+          example: 45000.00
+        total_pnl:
+          type: number
+          format: double
+          example: 465000.00
+        return_pct:
+          type: number
+          format: double
+          example: 23.25
+
+    PerformanceDetails:
+      type: object
+      properties:
+        holdings:
+          type: array
+          items:
+            $ref: '#/components/schemas/HoldingDetailItem'
+        summary:
+          $ref: '#/components/schemas/PerformanceSummary'
+
+    PerformanceDetailResponse:
+      type: object
+      required:
+        - success
+        - date
+        - details
+      properties:
+        success:
+          type: boolean
+          example: true
+        date:
+          type: string
+          format: date
+          example: '2026-01-10'
+        details:
+          $ref: '#/components/schemas/PerformanceDetails'
+
+    # ============================================================
+    # 株式評価指標スキーマ
+    # ============================================================
+    StockMetrics:
+      type: object
+      properties:
+        ticker:
+          type: string
+          example: AAPL
+        security_name:
+          type: string
+          example: Apple Inc.
+        pe_ratio:
+          type: number
+          format: double
+          example: 28.5
+          description: PER（株価収益率）
+        pb_ratio:
+          type: number
+          format: double
+          example: 42.3
+          description: PBR（株価純資産倍率）
+        dividend_yield:
+          type: number
+          format: double
+          example: 0.52
+          description: 配当利回り（%）
+        market_cap:
+          type: number
+          format: double
+          example: 2850000000000
+          description: 時価総額
+        eps:
+          type: number
+          format: double
+          example: 6.42
+          description: 1株あたり利益
+        revenue_growth:
+          type: number
+          format: double
+          example: 8.5
+          description: 売上成長率（%）
+        profit_margin:
+          type: number
+          format: double
+          example: 26.3
+          description: 利益率（%）
+        roe:
+          type: number
+          format: double
+          example: 148.2
+          description: 自己資本利益率（%）
+        debt_to_equity:
+          type: number
+          format: double
+          example: 1.73
+          description: 負債資本比率
+        current_ratio:
+          type: number
+          format: double
+          example: 0.93
+          description: 流動比率
+        last_updated:
+          type: string
+          format: date-time
+          example: '2026-01-10T10:00:00'
+          description: 最終更新日時
+
+    HoldingsMetricsResponse:
+      type: object
+      required:
+        - success
+        - count
+        - metrics
+      properties:
+        success:
+          type: boolean
+          example: true
+        count:
+          type: integer
+          example: 15
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockMetrics'
+
+    MetricsUpdateDetail:
+      type: object
+      properties:
+        ticker:
+          type: string
+          example: AAPL
+        success:
+          type: boolean
+          example: true
+        metrics:
+          type: object
+          properties:
+            pe_ratio:
+              type: number
+              format: double
+              example: 28.5
+            pb_ratio:
+              type: number
+              format: double
+              example: 42.3
+        error:
+          type: string
+
+    MetricsUpdateResponse:
+      type: object
+      required:
+        - success
+        - results
+      properties:
+        success:
+          type: boolean
+          example: true
+        results:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 15
+            success:
+              type: integer
+              example: 14
+            failed:
+              type: integer
+              example: 1
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/MetricsUpdateDetail'
