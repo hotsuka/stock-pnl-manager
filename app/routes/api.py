@@ -1132,3 +1132,64 @@ def update_all_stock_metrics():
     except Exception as e:
         logger.error(f"評価指標一括更新エラー: {str(e)}")
         raise ExternalAPIError(f"評価指標の一括更新中にエラーが発生しました: {str(e)}")
+
+
+@bp.route('/health', methods=['GET'])
+def health_check():
+    """ヘルスチェックエンドポイント"""
+    from datetime import datetime
+    from app import db
+
+    health_status = {
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'version': '1.0.0',
+        'checks': {}
+    }
+
+    # データベース接続チェック
+    try:
+        db.session.execute('SELECT 1')
+        health_status['checks']['database'] = {
+            'status': 'healthy',
+            'message': 'Database connection successful'
+        }
+    except Exception as e:
+        health_status['status'] = 'unhealthy'
+        health_status['checks']['database'] = {
+            'status': 'unhealthy',
+            'message': f'Database connection failed: {str(e)}'
+        }
+
+    # レコード数チェック
+    try:
+        transaction_count = Transaction.query.count()
+        holding_count = Holding.query.count()
+        health_status['checks']['data'] = {
+            'status': 'healthy',
+            'transactions': transaction_count,
+            'holdings': holding_count
+        }
+    except Exception as e:
+        health_status['checks']['data'] = {
+            'status': 'warning',
+            'message': f'Failed to get record counts: {str(e)}'
+        }
+
+    # アプリケーション稼働時間
+    try:
+        import os
+        if os.name == 'posix':
+            import subprocess
+            uptime_output = subprocess.check_output(['uptime', '-p']).decode('utf-8').strip()
+            health_status['checks']['uptime'] = {
+                'status': 'info',
+                'message': uptime_output
+            }
+    except:
+        pass  # Windows or uptime not available
+
+    # HTTPステータスコード
+    status_code = 200 if health_status['status'] == 'healthy' else 503
+
+    return jsonify(health_status), status_code

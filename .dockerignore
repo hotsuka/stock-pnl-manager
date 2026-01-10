@@ -1,0 +1,141 @@
+# Stock P&L Manager - Docker Ignore
+# Dockerイメージに含めないファイル/ディレクトリを指定
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Development files
+tests/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Logs
+logs/
+*.log
+flask.log
+
+# Database (開発用)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Backups
+backups/
+*.bak
+
+# Data files (サンプルデータを除く)
+data/uploads/
+data/*.db
+!data/sample_transactions.csv
+!data/sample_transactions_en.csv
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+
+# Development scripts
+scripts/
+migrations/versions/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# OS-specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Node modules (もしフロントエンドで使用する場合)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+
+# Large binary files
+*.pdf
+*.docx
+*.xlsx
+
+# Phase documentation
+PHASE_*.md
+!README.md
+
+# Other
+*.pyc
+.cache/

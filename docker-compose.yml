@@ -1,0 +1,70 @@
+# Stock P&L Manager - Docker Compose (Development)
+# 開発環境用のDocker Compose設定
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: stock-pnl-manager-dev
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_APP=run.py
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # アプリケーションコードのマウント（開発時のホットリロード用）
+      - .:/app
+      # データの永続化
+      - app-data:/app/data
+      # ログの永続化
+      - app-logs:/app/logs
+      # Python依存関係のキャッシュ（オプション）
+      - pip-cache:/home/appuser/.cache/pip
+    networks:
+      - stock-pnl-network
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # データベースバックアップサービス（オプション）
+  # backup:
+  #   image: alpine:latest
+  #   container_name: stock-pnl-backup
+  #   volumes:
+  #     - app-data:/data:ro
+  #     - ./backups:/backups
+  #   command: >
+  #     sh -c "while true; do
+  #       cp /data/stock_pnl.db /backups/stock_pnl_$$(date +%Y%m%d_%H%M%S).db;
+  #       find /backups -name 'stock_pnl_*.db' -mtime +7 -delete;
+  #       sleep 86400;
+  #     done"
+  #   networks:
+  #     - stock-pnl-network
+  #   restart: unless-stopped
+
+volumes:
+  # データベースファイルの永続化
+  app-data:
+    driver: local
+  # ログファイルの永続化
+  app-logs:
+    driver: local
+  # pipキャッシュ（ビルド高速化用）
+  pip-cache:
+    driver: local
+
+networks:
+  stock-pnl-network:
+    driver: bridge

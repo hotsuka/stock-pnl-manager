@@ -1,0 +1,146 @@
+# Stock P&L Manager - Docker Compose (Production)
+# 本番環境用のDocker Compose設定
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: stock-pnl-manager-prod
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=run.py
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///data/stock_pnl.db}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    volumes:
+      # データの永続化のみ（コードはコンテナに含まれる）
+      - app-data-prod:/app/data
+      - app-logs-prod:/app/logs
+    networks:
+      - stock-pnl-network-prod
+    restart: always
+    command: >
+      sh -c "
+        flask db upgrade &&
+        gunicorn -w 4 -b 0.0.0.0:8000 --timeout 120 --access-logfile - --error-logfile - 'app:create_app(\"production\")'
+      "
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Nginx リバースプロキシ（オプション）
+  nginx:
+    image: nginx:alpine
+    container_name: stock-pnl-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-logs:/var/log/nginx
+    networks:
+      - stock-pnl-network-prod
+    depends_on:
+      - app
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # データベースバックアップサービス
+  backup:
+    image: alpine:latest
+    container_name: stock-pnl-backup
+    volumes:
+      - app-data-prod:/data:ro
+      - ./backups:/backups
+    environment:
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+    command: >
+      sh -c "
+        while true; do
+          echo 'Starting backup...';
+          cp /data/stock_pnl.db /backups/stock_pnl_$$(date +%Y%m%d_%H%M%S).db;
+          echo 'Backup completed. Cleaning old backups...';
+          find /backups -name 'stock_pnl_*.db' -mtime +$$BACKUP_RETENTION_DAYS -delete;
+          echo 'Next backup in 24 hours';
+          sleep 86400;
+        done
+      "
+    networks:
+      - stock-pnl-network-prod
+    restart: always
+
+  # 監視・メトリクス収集（オプション）
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: stock-pnl-prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #     - prometheus-data:/prometheus
+  #   networks:
+  #     - stock-pnl-network-prod
+  #   restart: always
+
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: stock-pnl-grafana
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+  #   networks:
+  #     - stock-pnl-network-prod
+  #   depends_on:
+  #     - prometheus
+  #   restart: always
+
+volumes:
+  app-data-prod:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}
+  app-logs-prod:
+    driver: local
+  nginx-logs:
+    driver: local
+  # prometheus-data:
+  #   driver: local
+  # grafana-data:
+  #   driver: local
+
+networks:
+  stock-pnl-network-prod:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -24,6 +24,10 @@ chardet==5.2.0
 forex-python==1.8
 python-dotenv==1.0.0
 
+# Production Server
+gunicorn==21.2.0  # Linux/macOS
+waitress==2.1.2   # Windows
+
 # Development & Testing
 pytest>=7.4.3
 pytest-cov>=4.1.0
