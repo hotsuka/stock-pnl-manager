@@ -6,12 +6,25 @@
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>損益推移</h2>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 align-items-center">
             <div class="btn-group" role="group" aria-label="表示期間の切替">
                 <button type="button" class="btn btn-outline-primary active" id="btn-1m" onclick="changePeriod('1m')">過去1か月
                     (日次)</button>
                 <button type="button" class="btn btn-outline-primary" id="btn-1y" onclick="changePeriod('1y')">過去1年
                     (月次)</button>
+            </div>
+            <div class="benchmark-controls ms-3">
+                <label class="form-label mb-0 me-2">ベンチマーク:</label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="benchmark-topix"
+                           value="TOPIX" checked onchange="updateBenchmarkDisplay()">
+                    <label class="form-check-label" for="benchmark-topix">日経平均225</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="benchmark-sp500"
+                           value="SP500" checked onchange="updateBenchmarkDisplay()">
+                    <label class="form-check-label" for="benchmark-sp500">S&P 500</label>
+                </div>
             </div>
             <button type="button" class="btn btn-outline-secondary" onclick="refreshData()" id="btn-refresh" title="データを最新に更新">
                 <i class="bi bi-arrow-clockwise"></i> 更新
@@ -189,7 +202,7 @@
         if (!forceRefresh) {
             const cached = getCachedData(period);
             if (cached) {
-                console.log(`[DEBUG] Using cached data: ${cached.length} items`);
+                console.log(`[DEBUG] Using cached data`);
                 performanceData = cached;
                 renderChart();
                 renderTable();
@@ -202,8 +215,8 @@
         document.getElementById('performance-tbody').innerHTML = '<tr><td colspan="5" class="text-center">データを読み込み中...</td></tr>';
 
         try {
-            console.log(`[DEBUG] Fetching from API: /api/performance/history?period=${period}`);
-            const response = await fetch(`/api/performance/history?period=${period}`);
+            console.log(`[DEBUG] Fetching from API: /api/performance/history?period=${period}&benchmarks=true`);
+            const response = await fetch(`/api/performance/history?period=${period}&benchmarks=true`);
             console.log(`[DEBUG] Response status: ${response.status}`);
 
             const result = await response.json();
@@ -211,7 +224,7 @@
 
             if (result.success) {
                 performanceData = result.data;
-                console.log(`[DEBUG] Data count: ${performanceData.length}`);
+                console.log(`[DEBUG] Portfolio data count: ${performanceData.portfolio ? performanceData.portfolio.length : 0}`);
 
                 // キャッシュに保存
                 setCachedData(period, performanceData);
@@ -259,6 +272,14 @@
     }
 
     /**
+     * ベンチマーク表示の切替
+     */
+    function updateBenchmarkDisplay() {
+        console.log('[DEBUG] updateBenchmarkDisplay called');
+        renderChart();
+    }
+
+    /**
      * キャッシュ使用中インジケーターを表示
      */
     function showCacheIndicator() {
@@ -301,17 +322,20 @@
                 return;
             }
 
-            if (!performanceData || performanceData.length === 0) {
+            // データ構造の変更に対応: performanceData.portfolioを使用
+            const portfolioData = performanceData.portfolio || performanceData;
+
+            if (!portfolioData || portfolioData.length === 0) {
                 console.log('[DEBUG] No data to render');
                 document.getElementById('performance-chart').innerHTML = '<div class="alert alert-info mx-5 mt-5">表示するデータがありません</div>';
                 return;
             }
 
             console.log('[DEBUG] Processing data for chart...');
-            const dates = performanceData.map(d => d.date);
-            const holding = performanceData.map(d => d.holding_pnl);
-            const realized = performanceData.map(d => d.realized_pnl);
-            const dividend = performanceData.map(d => d.dividend_income);
+            const dates = portfolioData.map(d => d.date);
+            const holding = portfolioData.map(d => d.holding_pnl);
+            const realized = portfolioData.map(d => d.realized_pnl);
+            const dividend = portfolioData.map(d => d.dividend_income);
 
             const trace1 = {
                 x: dates,
@@ -336,6 +360,51 @@
                 type: 'bar',
                 marker: { color: '#27ae60' }
             };
+
+            // ベンチマークトレースを追加
+            const traces = [trace1, trace2, trace3];
+
+            // TOPIXベンチマーク
+            if (document.getElementById('benchmark-topix').checked &&
+                performanceData.benchmarks && performanceData.benchmarks.TOPIX) {
+                const topixDates = performanceData.benchmarks.TOPIX.map(d => d.date);
+                const topixVirtualPnl = performanceData.benchmarks.TOPIX.map(d => d.virtual_pnl);
+
+                traces.push({
+                    x: topixDates,
+                    y: topixVirtualPnl,
+                    type: 'scatter',
+                    mode: 'markers',
+                    marker: {
+                        color: '#ff6b6b',
+                        size: 8,
+                        symbol: 'circle'
+                    },
+                    name: '日経平均基準損益',
+                    hovertemplate: '<b>日経平均基準</b><br>日付: %{x}<br>仮想損益: %{y:,.0f}円<extra></extra>'
+                });
+            }
+
+            // S&P 500ベンチマーク
+            if (document.getElementById('benchmark-sp500').checked &&
+                performanceData.benchmarks && performanceData.benchmarks.SP500) {
+                const sp500Dates = performanceData.benchmarks.SP500.map(d => d.date);
+                const sp500VirtualPnl = performanceData.benchmarks.SP500.map(d => d.virtual_pnl);
+
+                traces.push({
+                    x: sp500Dates,
+                    y: sp500VirtualPnl,
+                    type: 'scatter',
+                    mode: 'markers',
+                    marker: {
+                        color: '#4ecdc4',
+                        size: 8,
+                        symbol: 'diamond'
+                    },
+                    name: 'S&P 500基準損益',
+                    hovertemplate: '<b>S&P 500基準</b><br>日付: %{x}<br>仮想損益: %{y:,.0f}円<extra></extra>'
+                });
+            }
 
             const layout = {
                 barmode: 'relative', // 正負両方の積み上げに対応
@@ -363,7 +432,7 @@
             chartDiv.innerHTML = ''; // 既存の内容をクリア
 
             console.log('[DEBUG] Calling Plotly.newPlot...');
-            Plotly.newPlot('performance-chart', [trace1, trace2, trace3], layout, config)
+            Plotly.newPlot('performance-chart', traces, layout, config)
                 .then(() => {
                     console.log('[DEBUG] Chart rendered successfully');
                 })
@@ -380,13 +449,17 @@
 
     function renderTable() {
         const tbody = document.getElementById('performance-tbody');
-        if (performanceData.length === 0) {
+
+        // データ構造の変更に対応: performanceData.portfolioを使用
+        const portfolioData = performanceData.portfolio || performanceData;
+
+        if (!portfolioData || portfolioData.length === 0) {
             tbody.innerHTML = '<tr><td colspan="5" class="text-center">データがありません</td></tr>';
             return;
         }
 
         // 最新の日付を上に表示
-        const sortedData = [...performanceData].reverse();
+        const sortedData = [...portfolioData].reverse();
 
         tbody.innerHTML = sortedData.map(d => {
             const totalClass = d.total >= 0 ? 'text-positive' : 'text-negative';
@@ -414,6 +487,9 @@
         const modal = new bootstrap.Modal(document.getElementById('detailModal'));
         const modalTitle = document.getElementById('detailModalLabel');
         const detailContent = document.getElementById('detailContent');
+
+        // 月次か日次かを判定 (YYYY-MM形式なら月次、YYYY-MM-DD形式なら日次)
+        const isMonthly = date.length === 7 && date.split('-').length === 2;
 
         // タイトルを設定
         const typeNames = {
@@ -449,11 +525,20 @@
             let details;
             if (!detailCache[date]) {
                 // APIから詳細データを取得
+                console.log(`Fetching detail for ${date}...`);
                 const response = await fetch(`/api/performance/detail?date=${date}`);
+
+                if (!response.ok) {
+                    console.error(`HTTP error! status: ${response.status}`);
+                    detailContent.innerHTML = `<div class="alert alert-danger">HTTP エラー: ${response.status} ${response.statusText}</div>`;
+                    return;
+                }
+
                 const result = await response.json();
+                console.log(`API response for ${date}:`, result);
 
                 if (!result.success) {
-                    detailContent.innerHTML = `<div class="alert alert-danger">データの取得に失敗しました: ${result.error}</div>`;
+                    detailContent.innerHTML = `<div class="alert alert-danger">データの取得に失敗しました: ${result.error || '不明なエラー'}</div>`;
                     return;
                 }
 
@@ -466,14 +551,17 @@
             }
 
             // タイプ別にHTMLを生成
+            console.log(`Rendering ${type} for ${date}, isMonthly=${isMonthly}`);
             let html = '';
             if (type === 'holding') {
-                html = renderHoldingDetails(details.holding_details);
+                html = renderHoldingDetails(details.holding_details, isMonthly);
             } else if (type === 'realized') {
-                html = renderRealizedDetails(details.realized_details);
+                html = renderRealizedDetails(details.realized_details, isMonthly);
             } else if (type === 'dividend') {
-                html = renderDividendDetails(details.dividend_details);
+                html = renderDividendDetails(details.dividend_details, isMonthly);
             }
+
+            console.log(`HTML generated, length: ${html.length}`);
 
             // HTML生成結果もキャッシュ
             detailCache[cacheKey] = html;
@@ -481,16 +569,21 @@
 
         } catch (error) {
             console.error('Error fetching detail:', error);
-            detailContent.innerHTML = `<div class="alert alert-danger">通信エラーが発生しました</div>`;
+            console.error('Error stack:', error.stack);
+            detailContent.innerHTML = `<div class="alert alert-danger">通信エラーが発生しました: ${error.message}</div>`;
         }
     }
 
-    function renderHoldingDetails(details) {
+    function renderHoldingDetails(details, isMonthly = false) {
         if (details.length === 0) {
             return '<div class="alert alert-info">この日の保有損益はありません</div>';
         }
 
         const total = details.reduce((sum, d) => sum + d.pnl, 0);
+
+        // 月次と日次でヘッダーを変更
+        const prevPriceLabel = isMonthly ? '前月末株価' : '前日株価';
+        const currPriceLabel = isMonthly ? '当月末株価' : '当日株価';
 
         let html = `
             <div class="detail-section">
@@ -502,8 +595,8 @@
                                 <th>ティッカー</th>
                                 <th>銘柄名</th>
                                 <th class="text-end">保有数量</th>
-                                <th class="text-end">前日株価</th>
-                                <th class="text-end">当日株価</th>
+                                <th class="text-end">${prevPriceLabel}</th>
+                                <th class="text-end">${currPriceLabel}</th>
                                 <th class="text-end">株価変動</th>
                                 <th class="text-end">為替レート</th>
                                 <th class="text-end">損益</th>
@@ -541,9 +634,10 @@
         return html;
     }
 
-    function renderRealizedDetails(details) {
+    function renderRealizedDetails(details, isMonthly = false) {
         if (details.length === 0) {
-            return '<div class="alert alert-info">この日の実現損益はありません</div>';
+            const message = isMonthly ? 'この月の実現損益はありません' : 'この日の実現損益はありません';
+            return `<div class="alert alert-info">${message}</div>`;
         }
 
         const total = details.reduce((sum, d) => sum + d.pnl, 0);
@@ -591,9 +685,10 @@
         return html;
     }
 
-    function renderDividendDetails(details) {
+    function renderDividendDetails(details, isMonthly = false) {
         if (details.length === 0) {
-            return '<div class="alert alert-info">この日の配当受取はありません</div>';
+            const message = isMonthly ? 'この月の配当受取はありません' : 'この日の配当受取はありません';
+            return `<div class="alert alert-info">${message}</div>`;
         }
 
         const total = details.reduce((sum, d) => sum + d.total_dividend, 0);

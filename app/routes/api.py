@@ -169,12 +169,21 @@ def fetch_dividends(ticker):
 @bp.route('/dividends/update-all', methods=['POST'])
 def update_all_dividends():
     """Fetch and save dividends for all holdings"""
-    results = DividendFetcher.update_all_holdings_dividends()
+    try:
+        results = DividendFetcher.update_all_holdings_dividends()
 
-    return jsonify({
-        'success': True,
-        'results': results
-    })
+        return jsonify({
+            'success': True,
+            'total_holdings': results['total_holdings'],
+            'success': results['success'],
+            'failed': results['failed'],
+            'details': results['details']
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 @bp.route('/dividends/summary', methods=['GET'])
@@ -243,6 +252,10 @@ def get_dividend_summary():
                 yearly_dividends_ticker_jpy['2022年以前'] += div_jpy
             else:
                 yearly_dividends_ticker_jpy[year] += div_jpy
+
+        # Skip if total dividends is 0
+        if total_dividends_ticker_jpy == 0:
+            continue
 
         # Calculate dividend yield (JPY / JPY)
         total_investment = ticker_info[ticker_symbol]['total_investment']
@@ -906,15 +919,59 @@ def get_pnl_history():
     })
 @bp.route('/performance/history', methods=['GET'])
 def get_performance_history():
-    """Get investment performance history (daily or monthly)"""
+    """Get investment performance history (daily or monthly) with optional benchmark comparison"""
     try:
         period = request.args.get('period', '1m') # '1m' for daily, '1y' for monthly
+        include_benchmarks = request.args.get('benchmarks', 'true').lower() == 'true'
+        benchmark_keys = request.args.getlist('benchmark_keys') or ['TOPIX', 'SP500']
 
-        if period == '1y':
-            data = PerformanceService.get_monthly_performance_history()
+        if include_benchmarks:
+            # ベンチマーク比較データを含む損益推移を取得
+            if period == '1y':
+                # 1年の場合は月次データを返す
+                portfolio_data = PerformanceService.get_monthly_performance_history()
+                # ベンチマークは日次で取得
+                data = PerformanceService.get_performance_history_with_benchmark(
+                    days=365,
+                    benchmark_keys=benchmark_keys
+                )
+                # ポートフォリオデータを月次に置き換え
+                data['portfolio'] = portfolio_data
+
+                # ベンチマークデータを月末のみにフィルタリング
+                from collections import defaultdict
+                for benchmark_key in data['benchmarks']:
+                    daily_benchmark = data['benchmarks'][benchmark_key]
+                    monthly_benchmark = defaultdict(lambda: None)
+
+                    # 各月の最終日データを抽出
+                    for entry in daily_benchmark:
+                        month_key = entry['date'][:7]  # YYYY-MM
+                        if monthly_benchmark[month_key] is None or entry['date'] > monthly_benchmark[month_key]['date']:
+                            monthly_benchmark[month_key] = entry.copy()
+                            # 月次データに合わせて日付をYYYY-MM形式に変更
+                            monthly_benchmark[month_key]['date'] = month_key
+
+                    # 月順にソートして配列に変換
+                    sorted_months = sorted(monthly_benchmark.keys())
+                    data['benchmarks'][benchmark_key] = [monthly_benchmark[m] for m in sorted_months]
+            else:
+                # 1か月の場合は日次データ
+                data = PerformanceService.get_performance_history_with_benchmark(
+                    days=30,
+                    benchmark_keys=benchmark_keys
+                )
         else:
-            # Default to 30 days daily
-            data = PerformanceService.get_performance_history(days=30)
+            # 既存の処理（ベンチマークなし）
+            if period == '1y':
+                portfolio_data = PerformanceService.get_monthly_performance_history()
+            else:
+                portfolio_data = PerformanceService.get_performance_history(days=30)
+
+            data = {
+                'portfolio': portfolio_data,
+                'benchmarks': {}
+            }
 
         return jsonify({
             'success': True,
@@ -951,9 +1008,13 @@ def get_performance_detail():
             'details': details
         })
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error in get_daily_detail: {error_details}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'traceback': error_details
         }), 500
 @bp.route('/dashboard/yearly-stats', methods=['GET'])
 def get_yearly_stats():

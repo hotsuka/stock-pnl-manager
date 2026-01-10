@@ -4,6 +4,7 @@ from app.models.dividend import Dividend
 from app.models.stock_price import StockPrice
 from app.models.realized_pnl import RealizedPnl
 from app.models.stock_metrics import StockMetrics
+from app.models.benchmark_price import BenchmarkPrice
 
 __all__ = [
     'Transaction',
@@ -11,5 +12,6 @@ __all__ = [
     'Dividend',
     'StockPrice',
     'RealizedPnl',
-    'StockMetrics'
+    'StockMetrics',
+    'BenchmarkPrice'
 ]
