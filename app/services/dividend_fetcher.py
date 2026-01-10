@@ -30,20 +30,50 @@ class DividendFetcher:
     """Fetch dividend data from various sources"""
 
     @staticmethod
+    def _calculate_quantity_at_date(ticker_symbol, target_date):
+        """
+        Calculate quantity held at a specific date
+
+        Args:
+            ticker_symbol: Stock ticker symbol
+            target_date: Target date (datetime.date)
+
+        Returns:
+            float: Quantity held at that date
+        """
+        from app.models.transaction import Transaction
+        from decimal import Decimal
+
+        # Get all transactions up to and including the target date
+        transactions = Transaction.query.filter(
+            Transaction.ticker_symbol == ticker_symbol,
+            Transaction.transaction_date <= target_date
+        ).order_by(Transaction.transaction_date).all()
+
+        quantity = Decimal('0')
+        for tx in transactions:
+            if tx.transaction_type == 'BUY':
+                quantity += Decimal(str(tx.quantity))
+            elif tx.transaction_type == 'SELL':
+                quantity -= Decimal(str(tx.quantity))
+
+        return float(quantity)
+
+    @staticmethod
     def fetch_dividends_yahoo(ticker_symbol, start_date=None, end_date=None):
         """
         Fetch dividend data from Yahoo Finance
 
         Args:
             ticker_symbol: Stock ticker symbol
-            start_date: Start date for dividend history (default: 1 year ago)
+            start_date: Start date for dividend history (default: 5 years ago)
             end_date: End date for dividend history (default: today)
 
         Returns:
             list: [{'ex_date': datetime, 'amount': float, 'currency': str}]
         """
         if start_date is None:
-            start_date = datetime.now() - timedelta(days=365)
+            start_date = datetime.now() - timedelta(days=365 * 5)  # 過去5年分
         if end_date is None:
             end_date = datetime.now()
 
@@ -58,8 +88,16 @@ class DividendFetcher:
             if dividends.empty:
                 return []
 
-            # Filter by date range
-            dividends = dividends[(dividends.index >= start_date) & (dividends.index <= end_date)]
+            # Filter by date range - make sure dates are timezone-aware if dividends.index is
+            import pandas as pd
+            if hasattr(dividends.index, 'tz') and dividends.index.tz is not None:
+                # dividends.index is timezone-aware, so convert our dates
+                start_date_tz = pd.Timestamp(start_date).tz_localize(dividends.index.tz)
+                end_date_tz = pd.Timestamp(end_date).tz_localize(dividends.index.tz)
+                dividends = dividends[(dividends.index >= start_date_tz) & (dividends.index <= end_date_tz)]
+            else:
+                # dividends.index is timezone-naive
+                dividends = dividends[(dividends.index >= start_date) & (dividends.index <= end_date)]
 
             # Get currency
             currency = stock.info.get('currency', 'USD') if hasattr(stock, 'info') else 'USD'
@@ -112,25 +150,32 @@ class DividendFetcher:
                 ).first()
 
                 if existing:
-                    # Update existing dividend
+                    # Update existing dividend - recalculate quantity at ex-dividend date
+                    quantity_held = DividendFetcher._calculate_quantity_at_date(
+                        ticker_symbol,
+                        div_data['ex_date']
+                    )
                     existing.dividend_amount = div_data['amount']
                     existing.currency = div_data['currency']
                     existing.source = div_data['source']
+                    existing.quantity_held = quantity_held
+                    existing.total_dividend = float(div_data['amount']) * quantity_held
                     results['existing'] += 1
                 else:
-                    # Get holding to calculate total dividend
-                    holding = Holding.query.filter_by(ticker_symbol=ticker_symbol).first()
-                    quantity_held = holding.total_quantity if holding else 0
+                    # Calculate quantity held at ex-dividend date
+                    quantity_held = DividendFetcher._calculate_quantity_at_date(
+                        ticker_symbol,
+                        div_data['ex_date']
+                    )
 
                     # Create new dividend record
                     dividend = Dividend(
                         ticker_symbol=ticker_symbol,
-                        security_name=security_name or ticker_symbol,
                         ex_dividend_date=div_data['ex_date'],
                         dividend_amount=div_data['amount'],
                         currency=div_data['currency'],
                         quantity_held=quantity_held,
-                        total_dividend=div_data['amount'] * quantity_held,
+                        total_dividend=float(div_data['amount']) * quantity_held,
                         source=div_data['source']
                     )
                     db.session.add(dividend)
@@ -153,24 +198,40 @@ class DividendFetcher:
     @staticmethod
     def update_all_holdings_dividends():
         """
-        Fetch and save dividends for all holdings
+        Fetch and save dividends for all holdings (including past holdings)
 
         Returns:
             dict: Summary of updates
         """
+        from app.models.transaction import Transaction
+
+        # Get all unique tickers from both current holdings and past transactions
         holdings = Holding.query.all()
+        transactions = Transaction.query.all()
+
+        # Build a map of ticker -> security_name
+        ticker_info = {}
+
+        # Add from holdings (current securities)
+        for h in holdings:
+            ticker_info[h.ticker_symbol] = h.security_name
+
+        # Add from transactions (including sold securities)
+        for t in transactions:
+            if t.ticker_symbol not in ticker_info:
+                ticker_info[t.ticker_symbol] = t.security_name
 
         results = {
-            'total_holdings': len(holdings),
+            'total_holdings': len(ticker_info),
             'success': 0,
             'failed': 0,
             'details': []
         }
 
-        for holding in holdings:
+        for ticker_symbol, security_name in ticker_info.items():
             div_result = DividendFetcher.save_dividends_to_db(
-                holding.ticker_symbol,
-                holding.security_name
+                ticker_symbol,
+                security_name
             )
 
             if div_result['errors']:

@@ -112,8 +112,12 @@
                     data-bs-target="#basic-info">基本情報</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link" id="metrics-tab" data-bs-toggle="tab"
-                    data-bs-target="#metrics">評価指標</button>
+            <button class="nav-link" id="metrics1-tab" data-bs-toggle="tab"
+                    data-bs-target="#metrics1">評価指標1</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="metrics2-tab" data-bs-toggle="tab"
+                    data-bs-target="#metrics2">評価指標2</button>
         </li>
     </ul>
 
@@ -166,33 +170,59 @@
             </div>
         </div>
 
-        <!-- 評価指標タブ -->
-        <div class="tab-pane fade" id="metrics">
+        <!-- 評価指標1タブ (バリュエーション指標) -->
+        <div class="tab-pane fade" id="metrics1">
             <div class="table-container">
                 <div class="table-responsive">
-                    <table class="table table-hover" id="metrics-table">
+                    <table class="table table-hover" id="metrics1-table">
                         <thead>
                             <tr>
                                 <th>ティッカー</th>
                                 <th>銘柄名</th>
+                                <th class="text-end">株価</th>
                                 <th class="text-end">時価総額</th>
                                 <th class="text-end">Beta</th>
                                 <th class="text-end">PER</th>
-                                <th class="text-end">EPS</th>
-                                <th>52週レンジ</th>
-                                <th class="text-end">YTDリターン</th>
-                                <th class="text-end">1年リターン</th>
                                 <th class="text-end">PBR</th>
+                                <th class="text-end">EPS</th>
                                 <th class="text-end">EV/売上</th>
                                 <th class="text-end">EV/EBITDA</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics1-tbody">
+                            <tr>
+                                <td colspan="10" class="text-center">
+                                    <div class="loading">評価指標1タブを選択すると、データが読み込まれます</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 評価指標2タブ (パフォーマンス指標) -->
+        <div class="tab-pane fade" id="metrics2">
+            <div class="table-container">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="metrics2-table">
+                        <thead>
+                            <tr>
+                                <th>ティッカー</th>
+                                <th>銘柄名</th>
+                                <th class="text-end">株価</th>
+                                <th class="text-end">対前日変動率</th>
+                                <th class="text-end">YTDリターン</th>
+                                <th class="text-end">1年リターン</th>
+                                <th>52週レンジ</th>
                                 <th class="text-end">売上</th>
                                 <th class="text-end">利益率</th>
                             </tr>
                         </thead>
-                        <tbody id="metrics-tbody">
+                        <tbody id="metrics2-tbody">
                             <tr>
-                                <td colspan="14" class="text-center">
-                                    <div class="loading">評価指標タブを選択すると、データが読み込まれます</div>
+                                <td colspan="9" class="text-center">
+                                    <div class="loading">評価指標2タブを選択すると、データが読み込まれます</div>
                                 </td>
                             </tr>
                         </tbody>
@@ -216,10 +246,21 @@
     document.addEventListener('DOMContentLoaded', function () {
         loadData();
 
-        // タブ切替イベント
-        document.getElementById('metrics-tab').addEventListener('shown.bs.tab', function() {
+        // タブ切替イベント - 評価指標1
+        document.getElementById('metrics1-tab').addEventListener('shown.bs.tab', function() {
             if (metricsData.length === 0) {
                 loadMetricsData();
+            } else {
+                renderMetrics1Table();
+            }
+        });
+
+        // タブ切替イベント - 評価指標2
+        document.getElementById('metrics2-tab').addEventListener('shown.bs.tab', function() {
+            if (metricsData.length === 0) {
+                loadMetricsData();
+            } else {
+                renderMetrics2Table();
             }
         });
     });
@@ -558,8 +599,25 @@
     // 評価指標データを取得
     async function loadMetricsData() {
         console.log('[DEBUG] loadMetricsData 開始');
-        const tbody = document.getElementById('metrics-tbody');
-        tbody.innerHTML = '<tr><td colspan="14" class="text-center"><div class="loading">データを読み込み中...</div></td></tr>';
+
+        // どちらのタブが開かれているか判定
+        const activeTabId = document.querySelector('.nav-link.active').id;
+        let tbody;
+        let colspan;
+
+        if (activeTabId === 'metrics1-tab') {
+            tbody = document.getElementById('metrics1-tbody');
+            colspan = 10;
+        } else if (activeTabId === 'metrics2-tab') {
+            tbody = document.getElementById('metrics2-tbody');
+            colspan = 9;
+        } else {
+            // デフォルトで評価指標1
+            tbody = document.getElementById('metrics1-tbody');
+            colspan = 10;
+        }
+
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center"><div class="loading">データを読み込み中...</div></td></tr>`;
 
         try {
             console.log('[DEBUG] APIリクエスト送信: /api/holdings/metrics');
@@ -575,56 +633,113 @@
             if (result.success) {
                 metricsData = result.metrics;
                 console.log('[DEBUG] metricsData 設定完了:', metricsData.length, '件');
-                renderMetricsTable();
+
+                // 開かれているタブに応じて描画
+                if (activeTabId === 'metrics1-tab') {
+                    renderMetrics1Table();
+                } else if (activeTabId === 'metrics2-tab') {
+                    renderMetrics2Table();
+                } else {
+                    renderMetrics1Table();
+                }
             } else {
                 console.error('[DEBUG] API成功フラグがfalse');
-                tbody.innerHTML = '<tr><td colspan="14" class="text-center text-danger">評価指標の読み込みに失敗しました</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-danger">評価指標の読み込みに失敗しました</td></tr>`;
             }
         } catch (error) {
             console.error('[DEBUG] 評価指標データ取得エラー:', error);
             console.error('[DEBUG] エラー詳細:', error.message, error.stack);
-            tbody.innerHTML = '<tr><td colspan="14" class="text-center text-danger">評価指標の読み込みに失敗しました: ' + error.message + '</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-danger">評価指標の読み込みに失敗しました: ${error.message}</td></tr>`;
         }
     }
 
-    // 評価指標テーブルを描画
-    function renderMetricsTable() {
-        console.log('[DEBUG] renderMetricsTable 開始');
-        const tbody = document.getElementById('metrics-tbody');
+    // 評価指標1テーブルを描画 (バリュエーション指標)
+    function renderMetrics1Table() {
+        console.log('[DEBUG] renderMetrics1Table 開始');
+        const tbody = document.getElementById('metrics1-tbody');
         console.log('[DEBUG] tbody要素:', tbody);
         console.log('[DEBUG] metricsData件数:', metricsData.length);
 
         if (metricsData.length === 0) {
             console.log('[DEBUG] データなし');
-            tbody.innerHTML = '<tr><td colspan="14" class="text-center">評価指標データがありません</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center">評価指標データがありません</td></tr>';
             return;
         }
 
-        console.log('[DEBUG] テーブル描画開始');
+        console.log('[DEBUG] 評価指標1テーブル描画開始');
         try {
-            tbody.innerHTML = metricsData.map(m => `
-            <tr>
-                <td><strong>${m.ticker_symbol}</strong></td>
-                <td>${getSecurityName(m.ticker_symbol)}</td>
-                <td class="text-end">${formatMarketCap(m.market_cap, m.currency)}</td>
-                <td class="text-end">${formatDecimal(m.beta, 2)}</td>
-                <td class="text-end">${formatDecimal(m.pe_ratio, 2)}</td>
-                <td class="text-end">${formatDecimal(m.eps, 2)}</td>
-                <td>${format52WeekRange(m.fifty_two_week_low, m.fifty_two_week_high, m.currency)}</td>
-                <td class="text-end ${getReturnClass(m.ytd_return)}">${formatPercentageMetrics(m.ytd_return)}</td>
-                <td class="text-end ${getReturnClass(m.one_year_return)}">${formatPercentageMetrics(m.one_year_return)}</td>
-                <td class="text-end">${formatDecimal(m.pb_ratio, 2)}</td>
-                <td class="text-end">${formatDecimal(m.ev_to_revenue, 2)}</td>
-                <td class="text-end">${formatDecimal(m.ev_to_ebitda, 2)}</td>
-                <td class="text-end">${formatRevenue(m.revenue, m.currency)}</td>
-                <td class="text-end">${formatPercentageMetrics(m.profit_margin)}</td>
-            </tr>
-        `).join('');
-            console.log('[DEBUG] テーブル描画完了');
+            tbody.innerHTML = metricsData.map(m => {
+                // holdingsDataから株価情報を取得
+                const holding = holdingsData.find(h => h.ticker_symbol === m.ticker_symbol);
+                const currentPrice = holding ? holding.current_price : null;
+                const currency = holding ? holding.currency : m.currency;
+
+                return `
+                <tr>
+                    <td><strong>${m.ticker_symbol}</strong></td>
+                    <td>${getSecurityName(m.ticker_symbol)}</td>
+                    <td class="text-end">${currentPrice ? formatPrice(currentPrice, currency) + ' ' + currency : '-'}</td>
+                    <td class="text-end">${formatMarketCap(m.market_cap, currency)}</td>
+                    <td class="text-end">${formatDecimal(m.beta, 2)}</td>
+                    <td class="text-end">${formatDecimal(m.pe_ratio, 2)}</td>
+                    <td class="text-end">${formatDecimal(m.pb_ratio, 2)}</td>
+                    <td class="text-end">${formatDecimal(m.eps, 2)}</td>
+                    <td class="text-end">${formatDecimal(m.ev_to_revenue, 2)}</td>
+                    <td class="text-end">${formatDecimal(m.ev_to_ebitda, 2)}</td>
+                </tr>
+            `;
+            }).join('');
+            console.log('[DEBUG] 評価指標1テーブル描画完了');
         } catch (error) {
             console.error('[DEBUG] テーブル描画エラー:', error);
             console.error('[DEBUG] エラー詳細:', error.message, error.stack);
-            tbody.innerHTML = '<tr><td colspan="14" class="text-center text-danger">テーブルの描画に失敗しました: ' + error.message + '</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">テーブルの描画に失敗しました: ' + error.message + '</td></tr>';
+        }
+    }
+
+    // 評価指標2テーブルを描画 (パフォーマンス指標)
+    function renderMetrics2Table() {
+        console.log('[DEBUG] renderMetrics2Table 開始');
+        const tbody = document.getElementById('metrics2-tbody');
+        console.log('[DEBUG] tbody要素:', tbody);
+        console.log('[DEBUG] metricsData件数:', metricsData.length);
+
+        if (metricsData.length === 0) {
+            console.log('[DEBUG] データなし');
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center">評価指標データがありません</td></tr>';
+            return;
+        }
+
+        console.log('[DEBUG] 評価指標2テーブル描画開始');
+        try {
+            tbody.innerHTML = metricsData.map(m => {
+                // holdingsDataから株価と対前日変動率を取得
+                const holding = holdingsData.find(h => h.ticker_symbol === m.ticker_symbol);
+                const currentPrice = holding ? holding.current_price : null;
+                const currency = holding ? holding.currency : m.currency;
+                const dayChangePct = holding ? holding.day_change_pct : null;
+
+                return `
+                <tr>
+                    <td><strong>${m.ticker_symbol}</strong></td>
+                    <td>${getSecurityName(m.ticker_symbol)}</td>
+                    <td class="text-end">${currentPrice ? formatPrice(currentPrice, currency) + ' ' + currency : '-'}</td>
+                    <td class="text-end ${dayChangePct !== null && dayChangePct >= 0 ? 'positive' : 'negative'}">
+                        ${dayChangePct !== null ? formatPercentage(dayChangePct) : '-'}
+                    </td>
+                    <td class="text-end ${getReturnClass(m.ytd_return)}">${formatPercentageMetrics(m.ytd_return)}</td>
+                    <td class="text-end ${getReturnClass(m.one_year_return)}">${formatPercentageMetrics(m.one_year_return)}</td>
+                    <td>${format52WeekRange(m.fifty_two_week_low, m.fifty_two_week_high, currency)}</td>
+                    <td class="text-end">${formatRevenue(m.revenue, currency)}</td>
+                    <td class="text-end">${formatPercentageMetrics(m.profit_margin)}</td>
+                </tr>
+            `;
+            }).join('');
+            console.log('[DEBUG] 評価指標2テーブル描画完了');
+        } catch (error) {
+            console.error('[DEBUG] テーブル描画エラー:', error);
+            console.error('[DEBUG] エラー詳細:', error.message, error.stack);
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">テーブルの描画に失敗しました: ' + error.message + '</td></tr>';
         }
     }
 

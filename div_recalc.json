@@ -1,0 +1,189 @@
+{
+  "details": [
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "6498.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 8,
+      "new": 0,
+      "ticker": "9418.T",
+      "total": 8
+    },
+    {
+      "errors": [],
+      "existing": 5,
+      "new": 0,
+      "ticker": "4071.T",
+      "total": 5
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "3003.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 20,
+      "new": 0,
+      "ticker": "MSFT",
+      "total": 20
+    },
+    {
+      "errors": [],
+      "existing": 20,
+      "new": 0,
+      "ticker": "GD",
+      "total": 20
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "3036.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 6,
+      "new": 0,
+      "ticker": "5831.T",
+      "total": 6
+    },
+    {
+      "errors": [],
+      "existing": 6,
+      "new": 0,
+      "ticker": "5832.T",
+      "total": 6
+    },
+    {
+      "errors": [],
+      "existing": 0,
+      "new": 0,
+      "ticker": "314A.T",
+      "total": 0
+    },
+    {
+      "errors": [],
+      "existing": 20,
+      "new": 0,
+      "ticker": "1557.T",
+      "total": 20
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "8306.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "6702.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "7203.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 20,
+      "new": 0,
+      "ticker": "TSM",
+      "total": 20
+    },
+    {
+      "errors": [],
+      "existing": 18,
+      "new": 0,
+      "ticker": "MU",
+      "total": 18
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "6981.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "1802.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "1812.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 0,
+      "new": 0,
+      "ticker": "COHR",
+      "total": 0
+    },
+    {
+      "errors": [],
+      "existing": 20,
+      "new": 0,
+      "ticker": "VOO",
+      "total": 20
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "1475.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 5,
+      "new": 0,
+      "ticker": "6315.T",
+      "total": 5
+    },
+    {
+      "errors": [],
+      "existing": 10,
+      "new": 0,
+      "ticker": "1975.T",
+      "total": 10
+    },
+    {
+      "errors": [],
+      "existing": 0,
+      "new": 0,
+      "ticker": "2928@S.T",
+      "total": 0
+    },
+    {
+      "errors": [],
+      "existing": 16,
+      "new": 0,
+      "ticker": "000660.KS",
+      "total": 16
+    }
+  ],
+  "failed": 0,
+  "success": 26,
+  "total_holdings": 26
+}

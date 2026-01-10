@@ -331,14 +331,43 @@
         }
 
         try {
-            // Show loading message
-            alert('配当データを更新中です。しばらくお待ちください...');
+            // Show loading overlay
+            const loadingOverlay = document.createElement('div');
+            loadingOverlay.innerHTML = `
+                <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                           background: rgba(0,0,0,0.5); z-index: 9999; display: flex;
+                           align-items: center; justify-content: center;">
+                    <div style="background: white; padding: 30px; border-radius: 8px; text-align: center;">
+                        <div class="spinner-border text-primary mb-3" role="status"></div>
+                        <p class="mb-0">配当データを更新中です...<br>しばらくお待ちください</p>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(loadingOverlay);
 
-            // Reload page after a delay to allow backend processing
-            window.location.reload();
+            // Call API to update dividends
+            const response = await fetch('/api/dividends/update-all', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            // Remove loading overlay
+            document.body.removeChild(loadingOverlay);
+
+            if (result.success) {
+                alert(`配当データの更新が完了しました。\n\n処理した銘柄数: ${result.total_holdings}\n成功: ${result.success}\n失敗: ${result.failed}`);
+                // Reload page to show updated data
+                window.location.reload();
+            } else {
+                alert('配当データの更新に失敗しました: ' + (result.error || '不明なエラー'));
+            }
         } catch (error) {
             console.error('データ更新エラー:', error);
-            alert('データの更新に失敗しました');
+            alert('データの更新に失敗しました: ' + error.message);
         }
     }
 
