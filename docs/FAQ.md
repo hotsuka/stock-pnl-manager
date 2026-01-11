@@ -595,13 +595,16 @@ DATABASE_URL=sqlite:///data/portfolio_b.db python run.py --port 5001
 
 **エンドポイント例**:
 ```bash
-# 保有銘柄一覧を取得
-curl http://localhost:5000/api/holdings
+# 保有銘柄一覧を取得（本番環境）
+curl http://localhost:8000/api/holdings
 
-# 特定銘柄の株価を更新
-curl -X POST http://localhost:5000/api/stock-price/update \
+# 特定銘柄の株価を更新（本番環境）
+curl -X POST http://localhost:8000/api/stock-price/update \
   -H "Content-Type: application/json" \
   -d '{"ticker": "7203.T"}'
+
+# 開発環境では5000番ポートを使用
+curl http://localhost:5000/api/holdings
 ```
 
 詳細は [API_REFERENCE.md](API_REFERENCE.md) を参照してください。

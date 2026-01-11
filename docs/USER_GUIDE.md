@@ -175,7 +175,9 @@ python run.py
  * Press CTRL+C to quit
 ```
 
-ブラウザで `http://localhost:5000` にアクセスしてください。
+ブラウザで `http://localhost:8000` にアクセスしてください。
+
+**注**: 開発環境では5000番ポート、本番環境では8000番ポートを使用します。
 
 ### 2.2 初回起動時の設定
 
@@ -216,7 +218,7 @@ Stock P&L Managerの基本は、SBI証券の取引履歴CSVをインポートす
 
 1. **アップロードページにアクセス**
    - Stock P&L Managerのトップページから「CSV アップロード」をクリック
-   - または直接 `http://localhost:5000/upload` にアクセス
+   - または直接 `http://localhost:8000/upload` にアクセス
 
 2. **ファイルを選択**
    - 「ファイルを選択」ボタンをクリック

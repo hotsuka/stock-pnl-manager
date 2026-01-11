@@ -4,6 +4,24 @@ Stock P&L Manager API v1.0
 
 ベースURL: `/api`
 
+## ⚠️ 重要: ポート番号について
+
+このドキュメントのサンプルコードでは開発環境用のポート番号（5000）を使用しています。
+
+- **開発環境**: `http://localhost:5000/api/*`
+- **本番環境**: `http://localhost:8000/api/*`
+
+本番環境で使用する場合は、URLのポート番号を8000に変更してください。
+
+**例**:
+```bash
+# 開発環境
+curl http://localhost:5000/api/holdings
+
+# 本番環境
+curl http://localhost:8000/api/holdings
+```
+
 ---
 
 ## 目次

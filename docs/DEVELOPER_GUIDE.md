@@ -173,7 +173,19 @@ flask db upgrade
 python run.py
 ```
 
-ブラウザで `http://localhost:5000` にアクセス
+ブラウザで `http://localhost:5000` にアクセス（開発環境）
+
+本番環境での起動：
+
+```bash
+# Windows
+start_server.bat
+
+# または手動で
+python -m waitress --host=0.0.0.0 --port=8000 --threads=4 wsgi:app
+```
+
+ブラウザで `http://localhost:8000` にアクセス（本番環境）
 
 ---
 
