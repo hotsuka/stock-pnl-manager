@@ -57,11 +57,11 @@ USER appuser
 ENV PATH=/home/appuser/.local/bin:$PATH
 
 # Expose port
-EXPOSE 5000
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health').read()" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read()" || exit 1
 
 # Default command
 CMD ["python", "run.py"]
