@@ -6,14 +6,16 @@ Includes caching mechanism to reduce API calls
 """
 
 import ssl
+from datetime import datetime, timedelta
+
 import certifi
 import yfinance as yf
-from datetime import datetime, timedelta
+from sqlalchemy.exc import IntegrityError
+
 from app import db
+from app.models.holding import Holding
 from app.models.stock_price import StockPrice
 from app.services.exchange_rate_fetcher import ExchangeRateFetcher
-from app.models.holding import Holding
-from sqlalchemy.exc import IntegrityError
 from app.utils.logger import get_logger, log_external_api_call
 
 logger = get_logger("stock_price_fetcher")
@@ -162,8 +164,9 @@ class StockPriceFetcher:
         Returns:
             dict: {ticker: {'price': float, 'currency': str, ...}}
         """
-        import yfinance as yf
         from datetime import datetime
+
+        import yfinance as yf
 
         results = {}
         uncached_tickers = []

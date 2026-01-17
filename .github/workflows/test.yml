@@ -87,7 +87,7 @@ jobs:
 
     - name: Check import sorting with isort
       run: |
-        isort --check-only app tests
+        isort --check-only --profile black app tests
 
   security:
     runs-on: ubuntu-latest

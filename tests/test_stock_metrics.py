@@ -1,7 +1,9 @@
 """株式評価指標モデルのテスト"""
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from app import create_app, db
 from app.models import StockMetrics
 

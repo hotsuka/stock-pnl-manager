@@ -1,7 +1,8 @@
 import csv
-import chardet
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+
+import chardet
 
 
 class CSVParser:

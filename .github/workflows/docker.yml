@@ -103,11 +103,26 @@ jobs:
           -e SECRET_KEY=test-secret-key \
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
 
-        # コンテナが起動するまで待機
-        sleep 10
+        # コンテナが起動するまで待機（最大60秒）
+        echo "Waiting for container to start..."
+        for i in {1..12}; do
+          sleep 5
+          if curl -sf http://localhost:5000/api/health > /dev/null 2>&1; then
+            echo "Health check passed!"
+            break
+          fi
+          echo "Attempt $i: Container not ready yet..."
+          docker logs test-container --tail 20 2>&1 || true
+        done
 
-        # ヘルスチェック
-        curl -f http://localhost:5000/api/health || exit 1
+        # 最終ヘルスチェック
+        if ! curl -sf http://localhost:5000/api/health; then
+          echo "Final health check failed. Container logs:"
+          docker logs test-container 2>&1 || true
+          docker stop test-container || true
+          docker rm test-container || true
+          exit 1
+        fi
 
         # コンテナを停止
         docker stop test-container

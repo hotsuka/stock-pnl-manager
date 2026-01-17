@@ -10,15 +10,16 @@ Fetches dividend data from multiple sources:
 For initial implementation, we'll focus on Yahoo Finance
 """
 
+# Disable SSL verification to work around Japanese username path issue
+import os
 import ssl
-import yfinance as yf
 from datetime import datetime, timedelta
+
+import yfinance as yf
+
 from app import db
 from app.models.dividend import Dividend
 from app.models.holding import Holding
-
-# Disable SSL verification to work around Japanese username path issue
-import os
 
 os.environ["PYTHONHTTPSVERIFY"] = "0"
 os.environ["CURL_CA_BUNDLE"] = ""
@@ -42,8 +43,9 @@ class DividendFetcher:
         Returns:
             float: Quantity held at that date
         """
-        from app.models.transaction import Transaction
         from decimal import Decimal
+
+        from app.models.transaction import Transaction
 
         # Get all transactions up to and including the target date
         transactions = (

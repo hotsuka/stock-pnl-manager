@@ -71,8 +71,9 @@ def handle_app_error(error):
 
 def handle_generic_error(error):
     """一般的なエラーハンドラー"""
-    from flask import jsonify
     import traceback
+
+    from flask import jsonify
 
     # ログに詳細を記録（本番環境では適切なロギングシステムを使用）
     print(f"Unhandled error: {str(error)}")

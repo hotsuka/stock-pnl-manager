@@ -3,15 +3,16 @@ pytest設定ファイル
 テスト用のフィクスチャを定義します
 """
 
-import pytest
-import tempfile
 import os
-from pathlib import Path
-from app import create_app, db
-from app.models import Transaction, Holding, RealizedPnl, Dividend
-from datetime import datetime, date
+import tempfile
+from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 
+import pytest
+
+from app import create_app, db
+from app.models import Dividend, Holding, RealizedPnl, Transaction
 
 # 本番DBのパス（テスト実行前にバックアップを作成するため）
 PRODUCTION_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stock_pnl.db"

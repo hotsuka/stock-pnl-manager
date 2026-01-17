@@ -1,6 +1,7 @@
 """ベンチマーク指数の価格キャッシュモデル"""
 
 from datetime import datetime
+
 from app import db
 
 

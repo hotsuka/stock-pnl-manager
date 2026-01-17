@@ -5,12 +5,12 @@ Fetches currency exchange rates from Yahoo Finance
 Uses Forex pairs like USDJPY=X
 """
 
-import ssl
-import yfinance as yf
-from datetime import datetime, timedelta
-
 # Disable SSL verification to work around Japanese username path issue
 import os
+import ssl
+from datetime import datetime, timedelta
+
+import yfinance as yf
 
 os.environ["PYTHONHTTPSVERIFY"] = "0"
 os.environ["CURL_CA_BUNDLE"] = ""

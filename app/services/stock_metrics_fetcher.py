@@ -4,10 +4,12 @@ Yahoo Financeから財務・株価指標を取得してデータベースに保�
 """
 
 import time
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
+
 import yfinance as yf
+
 from app import db
-from app.models import StockMetrics, Holding
+from app.models import Holding, StockMetrics
 from app.utils.logger import get_logger
 
 logger = get_logger("stock_metrics_fetcher")

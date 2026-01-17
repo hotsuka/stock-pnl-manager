@@ -4,8 +4,8 @@
 
 import logging
 import os
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 def setup_logger(app):

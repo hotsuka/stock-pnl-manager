@@ -1,7 +1,9 @@
 import os
+
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+
 from config import config
 
 # Initialize extensions
@@ -52,7 +54,7 @@ def create_app(config_name=None):
             app.logger.warning(f"自動バックアップ失敗: {e}")
 
     # Register blueprints
-    from app.routes import main, upload, api
+    from app.routes import api, main, upload
 
     app.register_blueprint(main.bp)
     app.register_blueprint(upload.bp)
@@ -61,14 +63,14 @@ def create_app(config_name=None):
     # Register error handlers
     from app.utils.errors import (
         AppError,
-        ValidationError,
-        NotFoundError,
         DatabaseError,
         ExternalAPIError,
-        handle_app_error,
-        handle_generic_error,
+        NotFoundError,
+        ValidationError,
         handle_404_error,
         handle_405_error,
+        handle_app_error,
+        handle_generic_error,
     )
 
     app.register_error_handler(AppError, handle_app_error)

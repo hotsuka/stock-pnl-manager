@@ -4,6 +4,7 @@ Yahoo Financeから取得した財務指標を保存するモデル
 """
 
 from datetime import datetime
+
 from app import db
 
 

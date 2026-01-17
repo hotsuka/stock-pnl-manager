@@ -2,9 +2,11 @@
 データモデルのユニットテスト
 """
 
-import pytest
 from datetime import date
-from app.models import Transaction, Holding, RealizedPnl, Dividend
+
+import pytest
+
+from app.models import Dividend, Holding, RealizedPnl, Transaction
 
 
 class TestTransaction:

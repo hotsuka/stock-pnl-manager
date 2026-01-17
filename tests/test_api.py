@@ -2,9 +2,10 @@
 APIエンドポイントの統合テスト
 """
 
-import pytest
 import json
 from datetime import date
+
+import pytest
 
 
 class TestHoldingsAPI:

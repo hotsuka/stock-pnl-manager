@@ -1,9 +1,10 @@
 """ベンチマーク指数取得サービス"""
 
-import ssl
 import os
-from datetime import datetime, date, timedelta
+import ssl
+from datetime import date, datetime, timedelta
 from decimal import Decimal
+
 import yfinance as yf
 from sqlalchemy.exc import IntegrityError
 

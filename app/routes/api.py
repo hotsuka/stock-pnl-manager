@@ -2,23 +2,24 @@
 API endpoints for data operations
 """
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, current_app, jsonify, request
+
+from app.models import Dividend, Holding, RealizedPnl, Transaction
 from app.services import (
-    StockPriceFetcher,
-    ExchangeRateFetcher,
     DividendFetcher,
+    ExchangeRateFetcher,
     PerformanceService,
     StockMetricsFetcher,
+    StockPriceFetcher,
 )
-from app.models import Holding, Transaction, Dividend, RealizedPnl
 from app.utils.errors import (
-    ValidationError,
-    NotFoundError,
     DatabaseError,
     ExternalAPIError,
-    validate_required_fields,
-    validate_positive_number,
+    NotFoundError,
+    ValidationError,
     validate_date_format,
+    validate_positive_number,
+    validate_required_fields,
 )
 from app.utils.logger import get_logger, log_api_call
 
@@ -221,8 +222,8 @@ def update_all_dividends():
 @bp.route("/dividends/summary", methods=["GET"])
 def get_dividend_summary():
     """Get dividend summary by ticker with yearly breakdown"""
-    from decimal import Decimal
     from collections import defaultdict
+    from decimal import Decimal
 
     # Get all dividends
     dividends = Dividend.query.order_by(
@@ -662,8 +663,9 @@ def update_transaction(transaction_id):
 @bp.route("/transactions/manual", methods=["POST"])
 def create_manual_transaction():
     """個別入力による取引の登録"""
-    from app.services import TransactionService
     from datetime import datetime
+
+    from app.services import TransactionService
 
     try:
         log_api_call(logger, "/transactions/manual", "POST")
@@ -882,9 +884,11 @@ def get_realized_pnl_ticker_irr(ticker):
 @bp.route("/realized-pnl", methods=["GET"])
 def get_realized_pnl():
     """Get all realized P&L records grouped by ticker"""
-    from sqlalchemy import func
-    from app import db
     from decimal import Decimal
+
+    from sqlalchemy import func
+
+    from app import db
 
     # Get all realized P&L records with all details
     realized_records = RealizedPnl.query.all()
@@ -1214,6 +1218,7 @@ def get_portfolio_composition():
 def get_pnl_history():
     """Get P&L history data for trend chart"""
     from datetime import datetime, timedelta
+
     from sqlalchemy import func
 
     period = request.args.get("period", "30d")  # 30d, 1y, all
@@ -1474,8 +1479,10 @@ def update_all_stock_metrics():
 def health_check():
     """ヘルスチェックエンドポイント"""
     from datetime import datetime
-    from app import db
+
     from sqlalchemy import text
+
+    from app import db
 
     health_status = {
         "status": "healthy",
