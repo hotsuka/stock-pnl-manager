@@ -40,7 +40,13 @@ def get_stock_price(ticker):
         price_data = StockPriceFetcher.get_current_price(ticker, use_cache=use_cache)
 
         if price_data:
-            log_api_call(logger, "/stock-price/<ticker>", "GET", {"ticker": ticker}, response_code=200)
+            log_api_call(
+                logger,
+                "/stock-price/<ticker>",
+                "GET",
+                {"ticker": ticker},
+                response_code=200,
+            )
             return jsonify({"success": True, "ticker": ticker, "data": price_data})
         else:
             raise NotFoundError(f"株価データを取得できませんでした: {ticker}")
@@ -61,7 +67,9 @@ def update_all_stock_prices():
         results = StockPriceFetcher.update_all_holdings_prices()
 
         log_api_call(logger, "/stock-price/update-all", "POST", response_code=200)
-        logger.info(f"株価一括更新完了: 成功={results['success']}, 失敗={results['failed']}")
+        logger.info(
+            f"株価一括更新完了: 成功={results['success']}, 失敗={results['failed']}"
+        )
 
         return jsonify({"success": True, "results": results})
 
@@ -93,7 +101,12 @@ def get_exchange_rate(from_currency):
         return jsonify({"success": True, "data": rate_data})
     else:
         return (
-            jsonify({"success": False, "error": f"Failed to fetch exchange rate for {from_currency}/{to_currency}"}),
+            jsonify(
+                {
+                    "success": False,
+                    "error": f"Failed to fetch exchange rate for {from_currency}/{to_currency}",
+                }
+            ),
             404,
         )
 
@@ -125,7 +138,9 @@ def convert_currency():
             log_api_call(logger, "/exchange-rate/convert", "POST", response_code=200)
             return jsonify({"success": True, "data": result})
         else:
-            raise ExternalAPIError(f"通貨変換に失敗しました: {from_currency} → {to_currency}")
+            raise ExternalAPIError(
+                f"通貨変換に失敗しました: {from_currency} → {to_currency}"
+            )
 
     except (ValidationError, ExternalAPIError):
         raise
@@ -140,20 +155,39 @@ def get_all_dividends():
     ticker = request.args.get("ticker")
 
     if ticker:
-        dividends = Dividend.query.filter_by(ticker_symbol=ticker).order_by(Dividend.ex_dividend_date.desc()).all()
+        dividends = (
+            Dividend.query.filter_by(ticker_symbol=ticker)
+            .order_by(Dividend.ex_dividend_date.desc())
+            .all()
+        )
     else:
         dividends = Dividend.query.order_by(Dividend.ex_dividend_date.desc()).all()
 
-    return jsonify({"success": True, "count": len(dividends), "dividends": [d.to_dict() for d in dividends]})
+    return jsonify(
+        {
+            "success": True,
+            "count": len(dividends),
+            "dividends": [d.to_dict() for d in dividends],
+        }
+    )
 
 
 @bp.route("/dividends/<ticker>", methods=["GET"])
 def get_dividends(ticker):
     """Get dividends for a specific ticker"""
-    dividends = Dividend.query.filter_by(ticker_symbol=ticker).order_by(Dividend.ex_dividend_date.desc()).all()
+    dividends = (
+        Dividend.query.filter_by(ticker_symbol=ticker)
+        .order_by(Dividend.ex_dividend_date.desc())
+        .all()
+    )
 
     return jsonify(
-        {"success": True, "ticker": ticker, "count": len(dividends), "dividends": [d.to_dict() for d in dividends]}
+        {
+            "success": True,
+            "ticker": ticker,
+            "count": len(dividends),
+            "dividends": [d.to_dict() for d in dividends],
+        }
     )
 
 
@@ -191,7 +225,9 @@ def get_dividend_summary():
     from collections import defaultdict
 
     # Get all dividends
-    dividends = Dividend.query.order_by(Dividend.ticker_symbol, Dividend.ex_dividend_date).all()
+    dividends = Dividend.query.order_by(
+        Dividend.ticker_symbol, Dividend.ex_dividend_date
+    ).all()
 
     # Group dividends by ticker
     ticker_dividends = defaultdict(list)
@@ -205,7 +241,10 @@ def get_dividend_summary():
     ticker_info = {}
     for t in transactions:
         if t.ticker_symbol not in ticker_info:
-            ticker_info[t.ticker_symbol] = {"security_name": t.security_name, "total_investment": Decimal("0")}
+            ticker_info[t.ticker_symbol] = {
+                "security_name": t.security_name,
+                "total_investment": Decimal("0"),
+            }
 
         # Calculate total investment (all purchases in JPY)
         if t.transaction_type == "BUY":
@@ -217,8 +256,16 @@ def get_dividend_summary():
     yearly_totals_jpy = defaultdict(lambda: Decimal("0"))
 
     # Get all required exchange rates for dividends
-    div_currencies = set(d.currency for d in dividends if d.currency and d.currency not in ["JPY", "日本円"])
-    div_rates = ExchangeRateFetcher.get_multiple_rates(list(div_currencies)) if div_currencies else {}
+    div_currencies = set(
+        d.currency
+        for d in dividends
+        if d.currency and d.currency not in ["JPY", "日本円"]
+    )
+    div_rates = (
+        ExchangeRateFetcher.get_multiple_rates(list(div_currencies))
+        if div_currencies
+        else {}
+    )
 
     def div_to_jpy(amount, currency):
         if not amount or not currency:
@@ -257,7 +304,11 @@ def get_dividend_summary():
 
         # Calculate dividend yield (JPY / JPY)
         total_investment = ticker_info[ticker_symbol]["total_investment"]
-        dividend_yield = (total_dividends_ticker_jpy / total_investment * 100) if total_investment > 0 else Decimal("0")
+        dividend_yield = (
+            (total_dividends_ticker_jpy / total_investment * 100)
+            if total_investment > 0
+            else Decimal("0")
+        )
 
         # Add to totals
         total_all_dividends_jpy += total_dividends_ticker_jpy
@@ -284,7 +335,9 @@ def get_dividend_summary():
                 "total_dividends": float(total_dividends_ticker_jpy),
                 "total_investment": float(total_investment),
                 "dividend_yield": float(dividend_yield),
-                "yearly_dividends": {str(year): float(amount) for year, amount in sorted_years},
+                "yearly_dividends": {
+                    str(year): float(amount) for year, amount in sorted_years
+                },
             }
         )
 
@@ -292,9 +345,13 @@ def get_dividend_summary():
     dividend_summary.sort(key=lambda x: x["ticker_symbol"])
 
     # Calculate overall dividend yield
-    total_investment_all = sum(ticker_info[ticker]["total_investment"] for ticker in ticker_info.keys())
+    total_investment_all = sum(
+        ticker_info[ticker]["total_investment"] for ticker in ticker_info.keys()
+    )
     overall_dividend_yield = (
-        (total_all_dividends_jpy / total_investment_all * 100) if total_investment_all > 0 else Decimal("0")
+        (total_all_dividends_jpy / total_investment_all * 100)
+        if total_investment_all > 0
+        else Decimal("0")
     )
 
     # Sort yearly totals: numeric years descending, then "2022年以前" at the end
@@ -318,7 +375,9 @@ def get_dividend_summary():
                 "total_dividends": float(total_all_dividends_jpy),
                 "total_investment": float(total_investment_all),
                 "dividend_yield": float(overall_dividend_yield),
-                "yearly_totals": {str(year): float(amount) for year, amount in sorted_yearly_totals},
+                "yearly_totals": {
+                    str(year): float(amount) for year, amount in sorted_yearly_totals
+                },
             },
         }
     )
@@ -329,7 +388,13 @@ def get_holdings():
     """Get all holdings"""
     holdings = Holding.query.all()
 
-    return jsonify({"success": True, "count": len(holdings), "holdings": [h.to_dict() for h in holdings]})
+    return jsonify(
+        {
+            "success": True,
+            "count": len(holdings),
+            "holdings": [h.to_dict() for h in holdings],
+        }
+    )
 
 
 @bp.route("/holdings/irr", methods=["GET"])
@@ -363,7 +428,11 @@ def get_holding_irr(ticker):
                 "irr": result["irr"],
                 "cash_flows": [
                     {
-                        "date": cf["date"].isoformat() if hasattr(cf["date"], "isoformat") else str(cf["date"]),
+                        "date": (
+                            cf["date"].isoformat()
+                            if hasattr(cf["date"], "isoformat")
+                            else str(cf["date"])
+                        ),
                         "amount": cf["amount"],
                         "type": cf["type"],
                     }
@@ -408,7 +477,10 @@ def delete_holding(ticker):
     holding = Holding.query.filter_by(ticker_symbol=ticker).first()
 
     if not holding:
-        return jsonify({"success": False, "error": f"保有銘柄が見つかりません: {ticker}"}), 404
+        return (
+            jsonify({"success": False, "error": f"保有銘柄が見つかりません: {ticker}"}),
+            404,
+        )
 
     try:
         # Delete all associated transactions
@@ -444,7 +516,10 @@ def delete_holding(ticker):
         )
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": f"削除に失敗しました: {str(e)}"}), 500
+        return (
+            jsonify({"success": False, "error": f"削除に失敗しました: {str(e)}"}),
+            500,
+        )
 
 
 @bp.route("/transactions", methods=["GET"])
@@ -513,7 +588,9 @@ def update_transaction(transaction_id):
 
         # 更新可能なフィールド
         if "transaction_date" in data:
-            transaction.transaction_date = validate_date_format(data["transaction_date"], "取引日")
+            transaction.transaction_date = validate_date_format(
+                data["transaction_date"], "取引日"
+            )
 
         if "ticker_symbol" in data:
             if not data["ticker_symbol"]:
@@ -560,7 +637,9 @@ def update_transaction(transaction_id):
         for ticker in affected_tickers:
             TransactionService.recalculate_holding(ticker)
 
-        log_api_call(logger, f"/transactions/{transaction_id}", "PUT", response_code=200)
+        log_api_call(
+            logger, f"/transactions/{transaction_id}", "PUT", response_code=200
+        )
 
         return jsonify(
             {
@@ -596,7 +675,14 @@ def create_manual_transaction():
         # 必須フィールドのバリデーション
         validate_required_fields(
             data,
-            ["transaction_date", "transaction_type", "ticker_symbol", "quantity", "unit_price", "settlement_amount"],
+            [
+                "transaction_date",
+                "transaction_type",
+                "ticker_symbol",
+                "quantity",
+                "unit_price",
+                "settlement_amount",
+            ],
         )
 
         # 取引種別のバリデーション
@@ -643,7 +729,11 @@ def create_manual_transaction():
             "unit_price": Decimal(str(data["unit_price"])),
             "currency": currency,
             "commission": Decimal(str(data.get("commission", 0))),
-            "exchange_rate": Decimal(str(data["exchange_rate"])) if data.get("exchange_rate") else None,
+            "exchange_rate": (
+                Decimal(str(data["exchange_rate"]))
+                if data.get("exchange_rate")
+                else None
+            ),
             "settlement_amount": Decimal(str(data["settlement_amount"])),
             "settlement_currency": "JPY",
         }
@@ -665,9 +755,22 @@ def create_manual_transaction():
                 "commission": float(data.get("commission", 0)),
                 "settlement_amount": float(data["settlement_amount"]),
             }
-            return jsonify({"success": True, "message": "取引を登録しました", "transaction": response_data}), 201
+            return (
+                jsonify(
+                    {
+                        "success": True,
+                        "message": "取引を登録しました",
+                        "transaction": response_data,
+                    }
+                ),
+                201,
+            )
         else:
-            error_msg = result["errors"][0]["error"] if result["errors"] else "取引の登録に失敗しました"
+            error_msg = (
+                result["errors"][0]["error"]
+                if result["errors"]
+                else "取引の登録に失敗しました"
+            )
             raise ValidationError(error_msg)
 
     except (ValidationError, NotFoundError):
@@ -687,7 +790,10 @@ def delete_transactions():
     transaction_ids = data.get("transaction_ids", [])
 
     if not transaction_ids:
-        return jsonify({"success": False, "error": "削除する取引が選択されていません"}), 400
+        return (
+            jsonify({"success": False, "error": "削除する取引が選択されていません"}),
+            400,
+        )
 
     try:
         deleted_count = 0
@@ -716,7 +822,10 @@ def delete_transactions():
         )
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": f"削除に失敗しました: {str(e)}"}), 500
+        return (
+            jsonify({"success": False, "error": f"削除に失敗しました: {str(e)}"}),
+            500,
+        )
 
 
 @bp.route("/realized-pnl/irr", methods=["GET"])
@@ -750,7 +859,11 @@ def get_realized_pnl_ticker_irr(ticker):
                 "irr": result["irr"],
                 "cash_flows": [
                     {
-                        "date": cf["date"].isoformat() if hasattr(cf["date"], "isoformat") else str(cf["date"]),
+                        "date": (
+                            cf["date"].isoformat()
+                            if hasattr(cf["date"], "isoformat")
+                            else str(cf["date"])
+                        ),
                         "amount": cf["amount"],
                         "type": cf["type"],
                     }
@@ -781,7 +894,11 @@ def get_realized_pnl():
     for record in realized_records:
         ticker = record.ticker_symbol
         if ticker not in ticker_data:
-            ticker_data[ticker] = {"ticker_symbol": ticker, "currency": record.currency, "records": []}
+            ticker_data[ticker] = {
+                "ticker_symbol": ticker,
+                "currency": record.currency,
+                "records": [],
+            }
         ticker_data[ticker]["records"].append(record)
 
     realized_pnl_list = []
@@ -806,15 +923,25 @@ def get_realized_pnl():
 
         # Calculate total cost from RealizedPnl records
         # Note: RealizedPnl.average_cost might be in JPY (incorrect), need to handle this
-        total_cost_from_records = sum(float(r.average_cost) * float(r.quantity) for r in realized_pnl_records)
-        total_proceeds_stock_currency = sum(float(r.sell_price) * float(r.quantity) for r in realized_pnl_records)
+        total_cost_from_records = sum(
+            float(r.average_cost) * float(r.quantity) for r in realized_pnl_records
+        )
+        total_proceeds_stock_currency = sum(
+            float(r.sell_price) * float(r.quantity) for r in realized_pnl_records
+        )
 
         # Get SELL transactions to get settlement amounts (in JPY)
-        sell_transactions = Transaction.query.filter_by(ticker_symbol=ticker, transaction_type="SELL").all()
+        sell_transactions = Transaction.query.filter_by(
+            ticker_symbol=ticker, transaction_type="SELL"
+        ).all()
 
         # Calculate sale proceeds in JPY from settlement amounts
         # Note: settlement_amount is always in JPY regardless of settlement_currency value
-        total_sale_proceeds_jpy = sum(float(tx.settlement_amount) for tx in sell_transactions if tx.settlement_amount)
+        total_sale_proceeds_jpy = sum(
+            float(tx.settlement_amount)
+            for tx in sell_transactions
+            if tx.settlement_amount
+        )
 
         # For cost, we need to calculate from the RealizedPnl data
         # The RealizedPnl.average_cost is in JPY for all stocks (due to old data)
@@ -833,7 +960,9 @@ def get_realized_pnl():
                         total_exchange_rate += implicit_rate * qty
                         total_sell_qty += qty
 
-            avg_exchange_rate = total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 150
+            avg_exchange_rate = (
+                total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 150
+            )
 
             # total_cost_from_records is in JPY, convert to USD
             total_cost_usd = total_cost_from_records / avg_exchange_rate
@@ -842,7 +971,9 @@ def get_realized_pnl():
             total_cost_jpy = total_cost_from_records
 
             # Average unit price in USD
-            average_unit_price = total_cost_usd / total_quantity if total_quantity > 0 else 0
+            average_unit_price = (
+                total_cost_usd / total_quantity if total_quantity > 0 else 0
+            )
         elif currency == "KRW":
             # For Korean stocks, similar logic
             total_exchange_rate = 0
@@ -856,7 +987,9 @@ def get_realized_pnl():
                         total_exchange_rate += implicit_rate * qty
                         total_sell_qty += qty
 
-            avg_exchange_rate = total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 0.1
+            avg_exchange_rate = (
+                total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 0.1
+            )
 
             # total_cost_from_records is in JPY, convert to KRW
             total_cost_krw = total_cost_from_records / avg_exchange_rate
@@ -865,26 +998,36 @@ def get_realized_pnl():
             total_cost_jpy = total_cost_from_records
 
             # Average unit price in KRW
-            average_unit_price = total_cost_krw / total_quantity if total_quantity > 0 else 0
+            average_unit_price = (
+                total_cost_krw / total_quantity if total_quantity > 0 else 0
+            )
         else:
             # For JPY stocks, cost is already in JPY
             total_cost_jpy = total_cost_from_records
-            average_unit_price = total_cost_jpy / total_quantity if total_quantity > 0 else 0
+            average_unit_price = (
+                total_cost_jpy / total_quantity if total_quantity > 0 else 0
+            )
 
         # Calculate sale unit price in stock's currency
         if currency == "USD":
             # For USD stocks, calculate from JPY sale proceeds
             sale_unit_price = (
-                (total_sale_proceeds_jpy / avg_exchange_rate) / total_quantity if total_quantity > 0 else 0
+                (total_sale_proceeds_jpy / avg_exchange_rate) / total_quantity
+                if total_quantity > 0
+                else 0
             )
         elif currency == "KRW":
             # For KRW stocks, calculate from JPY sale proceeds
             sale_unit_price = (
-                (total_sale_proceeds_jpy / avg_exchange_rate) / total_quantity if total_quantity > 0 else 0
+                (total_sale_proceeds_jpy / avg_exchange_rate) / total_quantity
+                if total_quantity > 0
+                else 0
             )
         else:
             # For JPY stocks, calculate directly
-            sale_unit_price = total_sale_proceeds_jpy / total_quantity if total_quantity > 0 else 0
+            sale_unit_price = (
+                total_sale_proceeds_jpy / total_quantity if total_quantity > 0 else 0
+            )
 
         # Calculate realized P&L in JPY
         realized_pnl_jpy = total_sale_proceeds_jpy - total_cost_jpy
@@ -907,7 +1050,13 @@ def get_realized_pnl():
             }
         )
 
-    return jsonify({"success": True, "count": len(realized_pnl_list), "realized_pnl": realized_pnl_list})
+    return jsonify(
+        {
+            "success": True,
+            "count": len(realized_pnl_list),
+            "realized_pnl": realized_pnl_list,
+        }
+    )
 
 
 @bp.route("/dashboard/summary", methods=["GET"])
@@ -921,8 +1070,14 @@ def get_dashboard_summary():
     dividends = Dividend.query.all()
 
     # Get required exchange rates for market value
-    currencies = set(h.currency for h in holdings if h.currency and h.currency not in ["JPY", "日本円"])
-    rates = ExchangeRateFetcher.get_multiple_rates(list(currencies)) if currencies else {}
+    currencies = set(
+        h.currency
+        for h in holdings
+        if h.currency and h.currency not in ["JPY", "日本円"]
+    )
+    rates = (
+        ExchangeRateFetcher.get_multiple_rates(list(currencies)) if currencies else {}
+    )
 
     def to_jpy(amount, currency):
         if not amount or not currency:
@@ -947,14 +1102,20 @@ def get_dashboard_summary():
 
     # 2. 総投資額
     holdings_cost_jpy = sum(float(h.total_cost or 0) for h in holdings)
-    realized_cost_jpy = sum(float(r.average_cost or 0) * float(r.quantity or 0) for r in realized_records)
+    realized_cost_jpy = sum(
+        float(r.average_cost or 0) * float(r.quantity or 0) for r in realized_records
+    )
     total_investment_jpy = holdings_cost_jpy + realized_cost_jpy
 
     # 3. 総評価額
-    holdings_value_jpy = sum(float(h.current_value or 0) for h in holdings)  # current_value is already in JPY
+    holdings_value_jpy = sum(
+        float(h.current_value or 0) for h in holdings
+    )  # current_value is already in JPY
     # 売却額 = 確定損益 + 取得コスト (既に JPY)
     realized_proceeds_jpy = sum(
-        float(r.realized_pnl or 0) + (float(r.average_cost or 0) * float(r.quantity or 0)) for r in realized_records
+        float(r.realized_pnl or 0)
+        + (float(r.average_cost or 0) * float(r.quantity or 0))
+        for r in realized_records
     )
 
     # 配当の合計 (各レコードを円換算)
@@ -964,11 +1125,15 @@ def get_dashboard_summary():
         # ここでは簡易的に現在のレートを使用（または本来は配当時レートを保持すべきだが、現状のスキーマに合わせて対応）
         total_dividends_jpy += to_jpy(d.total_dividend, d.currency)
 
-    total_evaluation_jpy = holdings_value_jpy + realized_proceeds_jpy + total_dividends_jpy
+    total_evaluation_jpy = (
+        holdings_value_jpy + realized_proceeds_jpy + total_dividends_jpy
+    )
 
     # 4. 総合損益
     total_pnl_jpy = total_evaluation_jpy - total_investment_jpy
-    total_pnl_pct = (total_pnl_jpy / total_investment_jpy * 100) if total_investment_jpy > 0 else 0
+    total_pnl_pct = (
+        (total_pnl_jpy / total_investment_jpy * 100) if total_investment_jpy > 0 else 0
+    )
 
     return jsonify(
         {
@@ -990,7 +1155,10 @@ def get_dashboard_summary():
                     "realized": realized_proceeds_jpy,
                     "dividends": total_dividends_jpy,
                 },
-                "total_pnl": {"amount": total_pnl_jpy, "percentage": round(total_pnl_pct, 2)},
+                "total_pnl": {
+                    "amount": total_pnl_jpy,
+                    "percentage": round(total_pnl_pct, 2),
+                },
                 "currency": "JPY",
             },
         }
@@ -1003,8 +1171,14 @@ def get_portfolio_composition():
     holdings = Holding.query.all()
 
     # Get required exchange rates for conversion
-    currencies = set(h.currency for h in holdings if h.currency and h.currency not in ["JPY", "日本円"])
-    rates = ExchangeRateFetcher.get_multiple_rates(list(currencies)) if currencies else {}
+    currencies = set(
+        h.currency
+        for h in holdings
+        if h.currency and h.currency not in ["JPY", "日本円"]
+    )
+    rates = (
+        ExchangeRateFetcher.get_multiple_rates(list(currencies)) if currencies else {}
+    )
 
     def to_jpy(amount, currency):
         if not amount or not currency:
@@ -1061,7 +1235,9 @@ def get_pnl_history():
 
     # Get realized P&L within date range
     realized_records = (
-        RealizedPnl.query.filter(RealizedPnl.sell_date >= start_date, RealizedPnl.sell_date <= end_date)
+        RealizedPnl.query.filter(
+            RealizedPnl.sell_date >= start_date, RealizedPnl.sell_date <= end_date
+        )
         .order_by(RealizedPnl.sell_date)
         .all()
     )
@@ -1072,7 +1248,11 @@ def get_pnl_history():
 
     while current_date <= end_date:
         # Calculate cumulative realized P&L up to this date
-        cumulative_realized = sum(float(r.realized_pnl or 0) for r in realized_records if r.sell_date <= current_date)
+        cumulative_realized = sum(
+            float(r.realized_pnl or 0)
+            for r in realized_records
+            if r.sell_date <= current_date
+        )
 
         pnl_history.append(
             {
@@ -1116,17 +1296,24 @@ def get_performance_history():
                     # 各月の最終日データを抽出
                     for entry in daily_benchmark:
                         month_key = entry["date"][:7]  # YYYY-MM
-                        if monthly_benchmark[month_key] is None or entry["date"] > monthly_benchmark[month_key]["date"]:
+                        if (
+                            monthly_benchmark[month_key] is None
+                            or entry["date"] > monthly_benchmark[month_key]["date"]
+                        ):
                             monthly_benchmark[month_key] = entry.copy()
                             # 月次データに合わせて日付をYYYY-MM形式に変更
                             monthly_benchmark[month_key]["date"] = month_key
 
                     # 月順にソートして配列に変換
                     sorted_months = sorted(monthly_benchmark.keys())
-                    data["benchmarks"][benchmark_key] = [monthly_benchmark[m] for m in sorted_months]
+                    data["benchmarks"][benchmark_key] = [
+                        monthly_benchmark[m] for m in sorted_months
+                    ]
             else:
                 # 1か月の場合は日次データ
-                data = PerformanceService.get_performance_history_with_benchmark(days=30, benchmark_keys=benchmark_keys)
+                data = PerformanceService.get_performance_history_with_benchmark(
+                    days=30, benchmark_keys=benchmark_keys
+                )
         else:
             # 既存の処理（ベンチマークなし）
             if period == "1y":
@@ -1162,7 +1349,10 @@ def get_performance_detail():
 
         error_details = traceback.format_exc()
         print(f"Error in get_daily_detail: {error_details}")
-        return jsonify({"success": False, "error": str(e), "traceback": error_details}), 500
+        return (
+            jsonify({"success": False, "error": str(e), "traceback": error_details}),
+            500,
+        )
 
 
 @bp.route("/dashboard/yearly-stats", methods=["GET"])
@@ -1173,7 +1363,9 @@ def get_yearly_stats():
     # Yearly Realized PnL stats from RealizedPnl records
     realized_records = RealizedPnl.query.all()
 
-    stats = defaultdict(lambda: {"total_cost": 0.0, "total_proceeds": 0.0, "realized_pnl": 0.0})
+    stats = defaultdict(
+        lambda: {"total_cost": 0.0, "total_proceeds": 0.0, "realized_pnl": 0.0}
+    )
 
     for r in realized_records:
         if not r.sell_date:
@@ -1191,11 +1383,19 @@ def get_yearly_stats():
     years = sorted(stats.keys(), reverse=True)
 
     response_data = []
-    total_all = {"year": "合計", "total_cost": 0.0, "total_proceeds": 0.0, "realized_pnl": 0.0, "pnl_pct": 0.0}
+    total_all = {
+        "year": "合計",
+        "total_cost": 0.0,
+        "total_proceeds": 0.0,
+        "realized_pnl": 0.0,
+        "pnl_pct": 0.0,
+    }
 
     for year in years:
         s = stats[year]
-        pnl_pct = (s["realized_pnl"] / s["total_cost"] * 100) if s["total_cost"] > 0 else 0
+        pnl_pct = (
+            (s["realized_pnl"] / s["total_cost"] * 100) if s["total_cost"] > 0 else 0
+        )
 
         item = {
             "year": str(year),
@@ -1211,7 +1411,9 @@ def get_yearly_stats():
         total_all["realized_pnl"] += s["realized_pnl"]
 
     if total_all["total_cost"] > 0:
-        total_all["pnl_pct"] = round((total_all["realized_pnl"] / total_all["total_cost"] * 100), 2)
+        total_all["pnl_pct"] = round(
+            (total_all["realized_pnl"] / total_all["total_cost"] * 100), 2
+        )
 
     return jsonify({"success": True, "yearly_stats": response_data, "total": total_all})
 
@@ -1228,12 +1430,20 @@ def get_holdings_metrics():
         if not ticker_symbols:
             return jsonify({"success": True, "count": 0, "metrics": []})
 
-        metrics_dict = StockMetricsFetcher.get_multiple_metrics(ticker_symbols, use_cache=True)
+        metrics_dict = StockMetricsFetcher.get_multiple_metrics(
+            ticker_symbols, use_cache=True
+        )
 
         log_api_call(logger, "/holdings/metrics", "GET", response_code=200)
         logger.info(f"評価指標取得完了: {len(metrics_dict)}/{len(ticker_symbols)}件")
 
-        return jsonify({"success": True, "count": len(metrics_dict), "metrics": list(metrics_dict.values())})
+        return jsonify(
+            {
+                "success": True,
+                "count": len(metrics_dict),
+                "metrics": list(metrics_dict.values()),
+            }
+        )
 
     except Exception as e:
         logger.error(f"評価指標取得エラー: {str(e)}")
@@ -1249,7 +1459,9 @@ def update_all_stock_metrics():
         results = StockMetricsFetcher.update_all_holdings_metrics()
 
         log_api_call(logger, "/stock-metrics/update-all", "POST", response_code=200)
-        logger.info(f"評価指標一括更新完了: 成功={results['success']}, 失敗={results['failed']}")
+        logger.info(
+            f"評価指標一括更新完了: 成功={results['success']}, 失敗={results['failed']}"
+        )
 
         return jsonify({"success": True, "results": results})
 
@@ -1265,12 +1477,20 @@ def health_check():
     from app import db
     from sqlalchemy import text
 
-    health_status = {"status": "healthy", "timestamp": datetime.utcnow().isoformat(), "version": "1.0.0", "checks": {}}
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0",
+        "checks": {},
+    }
 
     # データベース接続チェック
     try:
         db.session.execute(text("SELECT 1"))
-        health_status["checks"]["database"] = {"status": "healthy", "message": "Database connection successful"}
+        health_status["checks"]["database"] = {
+            "status": "healthy",
+            "message": "Database connection successful",
+        }
     except Exception as e:
         health_status["status"] = "unhealthy"
         health_status["checks"]["database"] = {
@@ -1288,7 +1508,10 @@ def health_check():
             "holdings": holding_count,
         }
     except Exception as e:
-        health_status["checks"]["data"] = {"status": "warning", "message": f"Failed to get record counts: {str(e)}"}
+        health_status["checks"]["data"] = {
+            "status": "warning",
+            "message": f"Failed to get record counts: {str(e)}",
+        }
 
     # アプリケーション稼働時間
     try:
@@ -1297,8 +1520,13 @@ def health_check():
         if os.name == "posix":
             import subprocess
 
-            uptime_output = subprocess.check_output(["uptime", "-p"]).decode("utf-8").strip()
-            health_status["checks"]["uptime"] = {"status": "info", "message": uptime_output}
+            uptime_output = (
+                subprocess.check_output(["uptime", "-p"]).decode("utf-8").strip()
+            )
+            health_status["checks"]["uptime"] = {
+                "status": "info",
+                "message": uptime_output,
+            }
     except:
         pass  # Windows or uptime not available
 

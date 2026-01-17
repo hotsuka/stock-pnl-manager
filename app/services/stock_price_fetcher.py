@@ -52,7 +52,9 @@ class StockPriceFetcher:
         # Check cache first
         if use_cache:
             today = datetime.now().date()
-            cached = StockPrice.query.filter_by(ticker_symbol=ticker_symbol, price_date=today).first()
+            cached = StockPrice.query.filter_by(
+                ticker_symbol=ticker_symbol, price_date=today
+            ).first()
 
             if cached:
                 return {
@@ -66,28 +68,48 @@ class StockPriceFetcher:
         try:
             # Add market suffix for Japanese stocks
             yf_ticker = StockPriceFetcher._format_ticker(ticker_symbol)
-            log_external_api_call(logger, "yfinance", f"get_price/{yf_ticker}", success=True)
+            log_external_api_call(
+                logger, "yfinance", f"get_price/{yf_ticker}", success=True
+            )
 
             stock = yf.Ticker(yf_ticker)
 
             # Get fast info for current price
             try:
-                price = stock.info.get("currentPrice") or stock.info.get("regularMarketPrice")
+                price = stock.info.get("currentPrice") or stock.info.get(
+                    "regularMarketPrice"
+                )
                 currency = stock.info.get("currency", "USD")
             except Exception as e:
-                logger.warning(f"Info取得失敗 ({ticker_symbol}), 履歴データにフォールバック: {str(e)}")
+                logger.warning(
+                    f"Info取得失敗 ({ticker_symbol}), 履歴データにフォールバック: {str(e)}"
+                )
                 # Fallback to history if info fails
                 hist = stock.history(period="1d")
                 if hist.empty:
                     log_external_api_call(
-                        logger, "yfinance", f"get_price/{yf_ticker}", success=False, error="履歴データが空"
+                        logger,
+                        "yfinance",
+                        f"get_price/{yf_ticker}",
+                        success=False,
+                        error="履歴データが空",
                     )
                     return None
                 price = float(hist["Close"].iloc[-1])
-                currency = stock.info.get("currency", "USD") if hasattr(stock, "info") else "USD"
+                currency = (
+                    stock.info.get("currency", "USD")
+                    if hasattr(stock, "info")
+                    else "USD"
+                )
 
             if price is None:
-                log_external_api_call(logger, "yfinance", f"get_price/{yf_ticker}", success=False, error="価格がNull")
+                log_external_api_call(
+                    logger,
+                    "yfinance",
+                    f"get_price/{yf_ticker}",
+                    success=False,
+                    error="価格がNull",
+                )
                 return None
 
             # Cache the price
@@ -119,7 +141,13 @@ class StockPriceFetcher:
 
         except Exception as e:
             logger.error(f"株価取得エラー ({ticker_symbol}): {str(e)}")
-            log_external_api_call(logger, "yfinance", f"get_price/{ticker_symbol}", success=False, error=str(e))
+            log_external_api_call(
+                logger,
+                "yfinance",
+                f"get_price/{ticker_symbol}",
+                success=False,
+                error=str(e),
+            )
             return None
 
     @staticmethod
@@ -144,14 +172,18 @@ class StockPriceFetcher:
         if use_cache:
             today = datetime.now().date()
             for ticker in ticker_symbols:
-                cached = StockPrice.query.filter_by(ticker_symbol=ticker, price_date=today).first()
+                cached = StockPrice.query.filter_by(
+                    ticker_symbol=ticker, price_date=today
+                ).first()
 
                 if cached:
                     results[ticker] = {
                         "price": float(cached.close_price),
                         "currency": cached.currency,
                         "timestamp": cached.created_at,
-                        "previous_close": float(cached.open_price) if cached.open_price else None,
+                        "previous_close": (
+                            float(cached.open_price) if cached.open_price else None
+                        ),
                         "source": "cache",
                     }
                 else:
@@ -177,7 +209,9 @@ class StockPriceFetcher:
                             ticker_data = tickers_obj.tickers[yf_ticker]
                             info = ticker_data.info
 
-                            price = info.get("currentPrice") or info.get("regularMarketPrice")
+                            price = info.get("currentPrice") or info.get(
+                                "regularMarketPrice"
+                            )
                             currency = info.get("currency", "USD")
                             previous_close = info.get("previousClose")
 
@@ -186,12 +220,18 @@ class StockPriceFetcher:
                                     "price": float(price),
                                     "currency": currency,
                                     "timestamp": datetime.now(),
-                                    "previous_close": float(previous_close) if previous_close else None,
+                                    "previous_close": (
+                                        float(previous_close)
+                                        if previous_close
+                                        else None
+                                    ),
                                     "source": "api",
                                 }
 
                                 # キャッシュに保存
-                                StockPriceFetcher._cache_price(original_ticker, price, currency)
+                                StockPriceFetcher._cache_price(
+                                    original_ticker, price, currency
+                                )
                         except Exception as e:
                             print(f"Error fetching {original_ticker}: {e}")
                             continue
@@ -200,7 +240,9 @@ class StockPriceFetcher:
                     print(f"Batch fetch error: {e}")
                     # フォールバック: 個別取得
                     for ticker in batch:
-                        price_data = StockPriceFetcher.get_current_price(ticker, use_cache=False)
+                        price_data = StockPriceFetcher.get_current_price(
+                            ticker, use_cache=False
+                        )
                         if price_data:
                             results[ticker] = price_data
 
@@ -225,7 +267,9 @@ class StockPriceFetcher:
 
         # Step 2: すべての株価を一括取得（バッチ処理で最適化）
         print(f"Fetching prices for {len(ticker_symbols)} holdings...")
-        prices_data = StockPriceFetcher.get_multiple_prices(ticker_symbols, use_cache=False)
+        prices_data = StockPriceFetcher.get_multiple_prices(
+            ticker_symbols, use_cache=False
+        )
 
         # Step 3: 株価データから実際の通貨を収集して為替レートを一括取得
         # 保有銘柄の currency ではなく、株価データから取得した実際の通貨を使用
@@ -237,7 +281,9 @@ class StockPriceFetcher:
 
         exchange_rates = {"JPY": 1.0, "日本円": 1.0}
         if currencies_needed:
-            print(f"Fetching exchange rates for {len(currencies_needed)} currencies: {currencies_needed}")
+            print(
+                f"Fetching exchange rates for {len(currencies_needed)} currencies: {currencies_needed}"
+            )
             for currency in currencies_needed:
                 rate_data = ExchangeRateFetcher.get_exchange_rate(currency, "JPY")
                 if rate_data:
@@ -256,7 +302,9 @@ class StockPriceFetcher:
 
                     # 保有銘柄の通貨が間違っている場合は修正
                     if holding.currency != actual_currency:
-                        logger.info(f"通貨修正: {holding.ticker_symbol} {holding.currency} -> {actual_currency}")
+                        logger.info(
+                            f"通貨修正: {holding.ticker_symbol} {holding.currency} -> {actual_currency}"
+                        )
                         holding.currency = actual_currency
 
                     # 実際の通貨に基づいて為替レートを取得
@@ -264,14 +312,23 @@ class StockPriceFetcher:
 
                     # Update holding with new price and exchange rate
                     previous_close = price_data.get("previous_close")
-                    holding.update_current_price(price_data["price"], exchange_rate, previous_close)
+                    holding.update_current_price(
+                        price_data["price"], exchange_rate, previous_close
+                    )
                     results["success"] += 1
                 else:
                     results["failed"] += 1
-                    results["errors"].append({"ticker": holding.ticker_symbol, "error": "Failed to fetch price"})
+                    results["errors"].append(
+                        {
+                            "ticker": holding.ticker_symbol,
+                            "error": "Failed to fetch price",
+                        }
+                    )
             except Exception as e:
                 results["failed"] += 1
-                results["errors"].append({"ticker": holding.ticker_symbol, "error": str(e)})
+                results["errors"].append(
+                    {"ticker": holding.ticker_symbol, "error": str(e)}
+                )
 
         # Step 5: データベースに一括コミット
         try:
@@ -288,7 +345,9 @@ class StockPriceFetcher:
             logger.info("株価更新後の評価指標更新を開始")
             metrics_results = StockMetricsFetcher.update_all_holdings_metrics()
             results["metrics"] = metrics_results
-            logger.info(f"評価指標更新完了: 成功={metrics_results['success']}, 失敗={metrics_results['failed']}")
+            logger.info(
+                f"評価指標更新完了: 成功={metrics_results['success']}, 失敗={metrics_results['failed']}"
+            )
         except Exception as e:
             logger.warning(f"評価指標更新スキップ: {str(e)}")
             results["metrics"] = {"success": 0, "failed": 0, "error": str(e)}
@@ -318,14 +377,22 @@ class StockPriceFetcher:
                 return []
 
             # Get currency
-            currency = stock.info.get("currency", "USD") if hasattr(stock, "info") else "USD"
+            currency = (
+                stock.info.get("currency", "USD") if hasattr(stock, "info") else "USD"
+            )
 
             # Cache historical prices
             for date, row in hist.iterrows():
-                StockPriceFetcher._cache_price(ticker_symbol, float(row["Close"]), currency, date.date())
+                StockPriceFetcher._cache_price(
+                    ticker_symbol, float(row["Close"]), currency, date.date()
+                )
 
             return [
-                {"date": date.date(), "close": float(row["Close"]), "currency": currency}
+                {
+                    "date": date.date(),
+                    "close": float(row["Close"]),
+                    "currency": currency,
+                }
                 for date, row in hist.iterrows()
             ]
 
@@ -360,7 +427,9 @@ class StockPriceFetcher:
 
         try:
             # Check if already exists
-            existing = StockPrice.query.filter_by(ticker_symbol=ticker_symbol, price_date=price_date).first()
+            existing = StockPrice.query.filter_by(
+                ticker_symbol=ticker_symbol, price_date=price_date
+            ).first()
 
             if existing:
                 # Update existing
@@ -369,7 +438,10 @@ class StockPriceFetcher:
             else:
                 # Create new
                 stock_price = StockPrice(
-                    ticker_symbol=ticker_symbol, price_date=price_date, close_price=price, currency=currency
+                    ticker_symbol=ticker_symbol,
+                    price_date=price_date,
+                    close_price=price,
+                    currency=currency,
                 )
                 db.session.add(stock_price)
 

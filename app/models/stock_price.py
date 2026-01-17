@@ -15,7 +15,9 @@ class StockPrice(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # 複合ユニーク制約
-    __table_args__ = (db.UniqueConstraint("ticker_symbol", "price_date", name="uix_ticker_date"),)
+    __table_args__ = (
+        db.UniqueConstraint("ticker_symbol", "price_date", name="uix_ticker_date"),
+    )
 
     def __repr__(self):
         return f"<StockPrice {self.ticker_symbol} {self.price_date} {self.close_price}>"

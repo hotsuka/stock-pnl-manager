@@ -20,7 +20,9 @@ class Transaction(db.Model):
     exchange_rate = db.Column(db.Numeric(10, 4))  # 為替レート（外国株の場合）
     settlement_currency = db.Column(db.String(3))  # 受渡通貨
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
     def __repr__(self):
         return f"<Transaction {self.ticker_symbol} {self.transaction_type} {self.quantity}@{self.unit_price}>"
@@ -29,7 +31,9 @@ class Transaction(db.Model):
         """辞書形式に変換"""
         return {
             "id": self.id,
-            "transaction_date": self.transaction_date.isoformat() if self.transaction_date else None,
+            "transaction_date": (
+                self.transaction_date.isoformat() if self.transaction_date else None
+            ),
             "ticker_symbol": self.ticker_symbol,
             "security_name": self.security_name,
             "transaction_type": self.transaction_type,
@@ -37,7 +41,9 @@ class Transaction(db.Model):
             "quantity": float(self.quantity) if self.quantity else 0,
             "unit_price": float(self.unit_price) if self.unit_price else 0,
             "commission": float(self.commission) if self.commission else 0,
-            "settlement_amount": float(self.settlement_amount) if self.settlement_amount else 0,
+            "settlement_amount": (
+                float(self.settlement_amount) if self.settlement_amount else 0
+            ),
             "exchange_rate": float(self.exchange_rate) if self.exchange_rate else None,
             "settlement_currency": self.settlement_currency,
             "created_at": self.created_at.isoformat() if self.created_at else None,

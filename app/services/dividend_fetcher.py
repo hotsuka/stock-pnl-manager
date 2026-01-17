@@ -48,7 +48,8 @@ class DividendFetcher:
         # Get all transactions up to and including the target date
         transactions = (
             Transaction.query.filter(
-                Transaction.ticker_symbol == ticker_symbol, Transaction.transaction_date <= target_date
+                Transaction.ticker_symbol == ticker_symbol,
+                Transaction.transaction_date <= target_date,
             )
             .order_by(Transaction.transaction_date)
             .all()
@@ -99,19 +100,31 @@ class DividendFetcher:
                 # dividends.index is timezone-aware, so convert our dates
                 start_date_tz = pd.Timestamp(start_date).tz_localize(dividends.index.tz)
                 end_date_tz = pd.Timestamp(end_date).tz_localize(dividends.index.tz)
-                dividends = dividends[(dividends.index >= start_date_tz) & (dividends.index <= end_date_tz)]
+                dividends = dividends[
+                    (dividends.index >= start_date_tz)
+                    & (dividends.index <= end_date_tz)
+                ]
             else:
                 # dividends.index is timezone-naive
-                dividends = dividends[(dividends.index >= start_date) & (dividends.index <= end_date)]
+                dividends = dividends[
+                    (dividends.index >= start_date) & (dividends.index <= end_date)
+                ]
 
             # Get currency
-            currency = stock.info.get("currency", "USD") if hasattr(stock, "info") else "USD"
+            currency = (
+                stock.info.get("currency", "USD") if hasattr(stock, "info") else "USD"
+            )
 
             # Convert to list of dicts
             dividend_list = []
             for date, amount in dividends.items():
                 dividend_list.append(
-                    {"ex_date": date.date(), "amount": float(amount), "currency": currency, "source": "yahoo_finance"}
+                    {
+                        "ex_date": date.date(),
+                        "amount": float(amount),
+                        "currency": currency,
+                        "source": "yahoo_finance",
+                    }
                 )
 
             return dividend_list
@@ -135,7 +148,13 @@ class DividendFetcher:
         # Fetch from Yahoo Finance
         dividends = DividendFetcher.fetch_dividends_yahoo(ticker_symbol)
 
-        results = {"ticker": ticker_symbol, "total": len(dividends), "new": 0, "existing": 0, "errors": []}
+        results = {
+            "ticker": ticker_symbol,
+            "total": len(dividends),
+            "new": 0,
+            "existing": 0,
+            "errors": [],
+        }
 
         for div_data in dividends:
             try:
@@ -146,7 +165,9 @@ class DividendFetcher:
 
                 if existing:
                     # Update existing dividend - recalculate quantity at ex-dividend date
-                    quantity_held = DividendFetcher._calculate_quantity_at_date(ticker_symbol, div_data["ex_date"])
+                    quantity_held = DividendFetcher._calculate_quantity_at_date(
+                        ticker_symbol, div_data["ex_date"]
+                    )
                     existing.dividend_amount = div_data["amount"]
                     existing.currency = div_data["currency"]
                     existing.source = div_data["source"]
@@ -155,7 +176,9 @@ class DividendFetcher:
                     results["existing"] += 1
                 else:
                     # Calculate quantity held at ex-dividend date
-                    quantity_held = DividendFetcher._calculate_quantity_at_date(ticker_symbol, div_data["ex_date"])
+                    quantity_held = DividendFetcher._calculate_quantity_at_date(
+                        ticker_symbol, div_data["ex_date"]
+                    )
 
                     # Create new dividend record
                     dividend = Dividend(
@@ -207,10 +230,17 @@ class DividendFetcher:
             if t.ticker_symbol not in ticker_info:
                 ticker_info[t.ticker_symbol] = t.security_name
 
-        results = {"total_holdings": len(ticker_info), "success": 0, "failed": 0, "details": []}
+        results = {
+            "total_holdings": len(ticker_info),
+            "success": 0,
+            "failed": 0,
+            "details": [],
+        }
 
         for ticker_symbol, security_name in ticker_info.items():
-            div_result = DividendFetcher.save_dividends_to_db(ticker_symbol, security_name)
+            div_result = DividendFetcher.save_dividends_to_db(
+                ticker_symbol, security_name
+            )
 
             if div_result["errors"]:
                 results["failed"] += 1
@@ -258,8 +288,14 @@ class DividendFetcher:
 
             # Sum by ticker
             if div.ticker_symbol not in results["by_ticker"]:
-                results["by_ticker"][div.ticker_symbol] = {"total": 0, "currency": currency, "count": 0}
-            results["by_ticker"][div.ticker_symbol]["total"] += float(div.total_dividend or 0)
+                results["by_ticker"][div.ticker_symbol] = {
+                    "total": 0,
+                    "currency": currency,
+                    "count": 0,
+                }
+            results["by_ticker"][div.ticker_symbol]["total"] += float(
+                div.total_dividend or 0
+            )
             results["by_ticker"][div.ticker_symbol]["count"] += 1
 
         return results

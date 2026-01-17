@@ -32,7 +32,10 @@ class TestValidationErrors:
 
     def test_validation_error_with_payload(self):
         """ペイロード付きValidationErrorのテスト"""
-        error = ValidationError(message="必須フィールドが不足しています", payload={"missing_fields": ["name", "email"]})
+        error = ValidationError(
+            message="必須フィールドが不足しています",
+            payload={"missing_fields": ["name", "email"]},
+        )
 
         error_dict = error.to_dict()
         assert error_dict["missing_fields"] == ["name", "email"]
@@ -173,7 +176,9 @@ class TestAPIErrorHandling:
 
     def test_exchange_rate_convert_missing_params(self, client):
         """通貨変換APIのパラメータ不足エラー"""
-        response = client.post("/api/exchange-rate/convert", json={"amount": 100})  # 'from' パラメータが不足
+        response = client.post(
+            "/api/exchange-rate/convert", json={"amount": 100}
+        )  # 'from' パラメータが不足
         assert response.status_code == 400
         data = response.get_json()
         assert data["success"] is False
@@ -181,7 +186,9 @@ class TestAPIErrorHandling:
 
     def test_exchange_rate_convert_invalid_amount(self, client):
         """通貨変換APIの無効な金額エラー"""
-        response = client.post("/api/exchange-rate/convert", json={"amount": -100, "from": "USD"})
+        response = client.post(
+            "/api/exchange-rate/convert", json={"amount": -100, "from": "USD"}
+        )
         assert response.status_code == 400
         data = response.get_json()
         assert data["success"] is False
@@ -194,14 +201,18 @@ class TestAPIErrorHandling:
         assert data["success"] is False
         assert "見つかりません" in data["error"]
 
-    def test_transaction_update_invalid_data(self, client, db_session, sample_transactions):
+    def test_transaction_update_invalid_data(
+        self, client, db_session, sample_transactions
+    ):
         """無効なデータでの取引更新エラー"""
         # 最初の取引を使用
         transaction = sample_transactions[0]
         db_session.add(transaction)
         db_session.commit()
 
-        response = client.put(f"/api/transactions/{transaction.id}", json={"quantity": -100})  # 負の数量は無効
+        response = client.put(
+            f"/api/transactions/{transaction.id}", json={"quantity": -100}
+        )  # 負の数量は無効
         assert response.status_code == 400
         data = response.get_json()
         assert data["success"] is False

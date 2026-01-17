@@ -38,7 +38,9 @@ class StockMetricsFetcher:
         try:
             # キャッシュチェック（当日データがあればreturn）
             if use_cache:
-                cached = StockMetrics.query.filter_by(ticker_symbol=ticker_symbol).first()
+                cached = StockMetrics.query.filter_by(
+                    ticker_symbol=ticker_symbol
+                ).first()
                 if cached and cached.last_updated:
                     if cached.last_updated.date() == date.today():
                         logger.info(f"キャッシュから評価指標取得: {ticker_symbol}")
@@ -161,7 +163,9 @@ class StockMetricsFetcher:
                 results[ticker] = metrics
             time.sleep(0.1)  # レート制限対策
 
-        logger.info(f"複数銘柄の評価指標取得完了: {len(results)}/{len(ticker_symbols)}件成功")
+        logger.info(
+            f"複数銘柄の評価指標取得完了: {len(results)}/{len(ticker_symbols)}件成功"
+        )
         return results
 
     @staticmethod
@@ -188,7 +192,9 @@ class StockMetricsFetcher:
                     details.append({"ticker": ticker, "status": "success"})
                 else:
                     failed_count += 1
-                    details.append({"ticker": ticker, "status": "failed", "reason": "取得失敗"})
+                    details.append(
+                        {"ticker": ticker, "status": "failed", "reason": "取得失敗"}
+                    )
 
                 time.sleep(0.1)  # レート制限対策
 
@@ -197,7 +203,9 @@ class StockMetricsFetcher:
                 details.append({"ticker": ticker, "status": "failed", "reason": str(e)})
                 logger.error(f"評価指標更新エラー ({ticker}): {str(e)}")
 
-        logger.info(f"全保有銘柄の評価指標更新完了: 成功={success_count}, 失敗={failed_count}")
+        logger.info(
+            f"全保有銘柄の評価指標更新完了: 成功={success_count}, 失敗={failed_count}"
+        )
 
         return {"success": success_count, "failed": failed_count, "details": details}
 

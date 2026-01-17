@@ -26,9 +26,15 @@ class Dividend(db.Model):
         return {
             "id": self.id,
             "ticker_symbol": self.ticker_symbol,
-            "ex_dividend_date": self.ex_dividend_date.isoformat() if self.ex_dividend_date else None,
-            "payment_date": self.payment_date.isoformat() if self.payment_date else None,
-            "dividend_amount": float(self.dividend_amount) if self.dividend_amount else 0,
+            "ex_dividend_date": (
+                self.ex_dividend_date.isoformat() if self.ex_dividend_date else None
+            ),
+            "payment_date": (
+                self.payment_date.isoformat() if self.payment_date else None
+            ),
+            "dividend_amount": (
+                float(self.dividend_amount) if self.dividend_amount else 0
+            ),
             "currency": self.currency,
             "total_dividend": float(self.total_dividend) if self.total_dividend else 0,
             "quantity_held": float(self.quantity_held) if self.quantity_held else 0,

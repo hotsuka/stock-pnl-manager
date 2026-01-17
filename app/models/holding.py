@@ -11,7 +11,9 @@ class Holding(db.Model):
     ticker_symbol = db.Column(db.String(20), unique=True, nullable=False, index=True)
     security_name = db.Column(db.String(200))
     total_quantity = db.Column(db.Numeric(15, 4), nullable=False)  # 現在保有数量
-    average_cost = db.Column(db.Numeric(15, 4), nullable=False)  # 平均取得単価（移動平均法）
+    average_cost = db.Column(
+        db.Numeric(15, 4), nullable=False
+    )  # 平均取得単価（移動平均法）
     currency = db.Column(db.String(3), nullable=False)
     total_cost = db.Column(db.Numeric(15, 4), nullable=False)  # 総取得コスト
     current_price = db.Column(db.Numeric(15, 4))  # 最新株価
@@ -24,7 +26,9 @@ class Holding(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):
-        return f"<Holding {self.ticker_symbol} {self.total_quantity}@{self.average_cost}>"
+        return (
+            f"<Holding {self.ticker_symbol} {self.total_quantity}@{self.average_cost}>"
+        )
 
     def to_dict(self):
         """辞書形式に変換"""
@@ -37,12 +41,22 @@ class Holding(db.Model):
             "currency": self.currency,
             "total_cost": float(self.total_cost) if self.total_cost else 0,
             "current_price": float(self.current_price) if self.current_price else None,
-            "previous_close": float(self.previous_close) if self.previous_close else None,
-            "day_change_pct": float(self.day_change_pct) if self.day_change_pct else None,
+            "previous_close": (
+                float(self.previous_close) if self.previous_close else None
+            ),
+            "day_change_pct": (
+                float(self.day_change_pct) if self.day_change_pct else None
+            ),
             "current_value": float(self.current_value) if self.current_value else None,
-            "unrealized_pnl": float(self.unrealized_pnl) if self.unrealized_pnl else None,
-            "unrealized_pnl_pct": float(self.unrealized_pnl_pct) if self.unrealized_pnl_pct else None,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "unrealized_pnl": (
+                float(self.unrealized_pnl) if self.unrealized_pnl else None
+            ),
+            "unrealized_pnl_pct": (
+                float(self.unrealized_pnl_pct) if self.unrealized_pnl_pct else None
+            ),
+            "last_updated": (
+                self.last_updated.isoformat() if self.last_updated else None
+            ),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -67,7 +81,10 @@ class Holding(db.Model):
         if previous_close is not None:
             self.previous_close = Decimal(str(previous_close))
             if previous_close > 0:
-                day_change = ((float(price_decimal) - float(previous_close)) / float(previous_close)) * 100
+                day_change = (
+                    (float(price_decimal) - float(previous_close))
+                    / float(previous_close)
+                ) * 100
                 self.day_change_pct = Decimal(str(day_change))
 
         self.last_updated = datetime.utcnow()

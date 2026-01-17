@@ -43,7 +43,14 @@ class CSVParser:
     }
 
     # 取引タイプマッピング
-    TRANSACTION_TYPE_MAPPING = {"買付": "BUY", "買": "BUY", "BUY": "BUY", "売却": "SELL", "売": "SELL", "SELL": "SELL"}
+    TRANSACTION_TYPE_MAPPING = {
+        "買付": "BUY",
+        "買": "BUY",
+        "BUY": "BUY",
+        "売却": "SELL",
+        "売": "SELL",
+        "SELL": "SELL",
+    }
 
     @staticmethod
     def detect_encoding(file_path):
@@ -60,7 +67,13 @@ class CSVParser:
             return None
 
         # 複数の日付フォーマットに対応
-        date_formats = ["%Y/%m/%d", "%Y-%m-%d", "%Y年%m月%d日", "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"]
+        date_formats = [
+            "%Y/%m/%d",
+            "%Y-%m-%d",
+            "%Y年%m月%d日",
+            "%Y/%m/%d %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+        ]
 
         for fmt in date_formats:
             try:
@@ -122,7 +135,13 @@ class CSVParser:
                 normalized_row[cls.COLUMN_MAPPING[key]] = value
 
         # 必須項目チェック
-        required_fields = ["transaction_date", "ticker_symbol", "transaction_type", "quantity", "unit_price"]
+        required_fields = [
+            "transaction_date",
+            "ticker_symbol",
+            "transaction_type",
+            "quantity",
+            "unit_price",
+        ]
 
         for field in required_fields:
             if field not in normalized_row or not normalized_row[field]:
@@ -142,11 +161,15 @@ class CSVParser:
             "transaction_date": cls.parse_date(normalized_row["transaction_date"]),
             "ticker_symbol": ticker_symbol,
             "security_name": normalized_row.get("security_name", "").strip(),
-            "transaction_type": cls._parse_transaction_type(normalized_row["transaction_type"]),
+            "transaction_type": cls._parse_transaction_type(
+                normalized_row["transaction_type"]
+            ),
             "quantity": cls.parse_number(normalized_row["quantity"]),
             "unit_price": cls.parse_number(normalized_row["unit_price"]),
             "commission": cls.parse_number(normalized_row.get("commission", "0")),
-            "settlement_amount": cls.parse_number(normalized_row.get("settlement_amount")),
+            "settlement_amount": cls.parse_number(
+                normalized_row.get("settlement_amount")
+            ),
             "currency": currency,
             "exchange_rate": cls.parse_number(normalized_row.get("exchange_rate")),
             "settlement_currency": currency,

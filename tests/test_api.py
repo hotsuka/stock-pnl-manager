@@ -96,7 +96,9 @@ class TestTransactionsAPI:
         update_data = {"quantity": 150, "price": 2100.0, "commission": 150.0}
 
         response = client.put(
-            f"/api/transactions/{transaction_id}", data=json.dumps(update_data), content_type="application/json"
+            f"/api/transactions/{transaction_id}",
+            data=json.dumps(update_data),
+            content_type="application/json",
         )
 
         assert response.status_code == 200
@@ -107,7 +109,11 @@ class TestTransactionsAPI:
         """存在しない取引の更新"""
         update_data = {"quantity": 100}
 
-        response = client.put("/api/transactions/99999", data=json.dumps(update_data), content_type="application/json")
+        response = client.put(
+            "/api/transactions/99999",
+            data=json.dumps(update_data),
+            content_type="application/json",
+        )
 
         assert response.status_code == 404
 
@@ -179,7 +185,9 @@ class TestDashboardAPI:
         assert data["success"] is True
         assert "summary" in data
 
-    def test_get_dashboard_summary_with_data(self, client, db_session, sample_holdings, sample_realized_pnl):
+    def test_get_dashboard_summary_with_data(
+        self, client, db_session, sample_holdings, sample_realized_pnl
+    ):
         """ダッシュボードサマリー（データあり）"""
         response = client.get("/api/dashboard/summary")
         assert response.status_code == 200

@@ -78,7 +78,9 @@ class PerformanceService:
                 splits_sorted = splits.sort_index()
 
                 for split_date, split_ratio in splits_sorted.items():
-                    split_date_obj = split_date.date() if hasattr(split_date, "date") else split_date
+                    split_date_obj = (
+                        split_date.date() if hasattr(split_date, "date") else split_date
+                    )
                     if start_date <= split_date_obj <= end_date:
                         ratio *= split_ratio
                         cumulative[split_date_obj] = ratio
@@ -104,7 +106,9 @@ class PerformanceService:
             print(f"DEBUG: Period: {start_date} to {end_date}")
 
             # 1. 全取引履歴を取得
-            transactions = Transaction.query.order_by(Transaction.transaction_date).all()
+            transactions = Transaction.query.order_by(
+                Transaction.transaction_date
+            ).all()
             if not transactions:
                 print("DEBUG: No transactions found")
                 return []
@@ -133,7 +137,9 @@ class PerformanceService:
         min_tx_date = transactions[0].transaction_date
         download_start = min(start_date, min_tx_date) - timedelta(days=10)
 
-        print(f"DEBUG: Tickers={len(yf_tickers)}, Period={download_start} to {end_date}")
+        print(
+            f"DEBUG: Tickers={len(yf_tickers)}, Period={download_start} to {end_date}"
+        )
 
         # バッチ処理で取得
         all_data_frames = []
@@ -160,10 +166,18 @@ class PerformanceService:
                             all_data_frames.append(batch_data["Close"])
                     else:
                         if "Close" in batch_data.columns:
-                            all_data_frames.append(batch_data[["Close"]].rename(columns={"Close": batch[0]}))
+                            all_data_frames.append(
+                                batch_data[["Close"]].rename(
+                                    columns={"Close": batch[0]}
+                                )
+                            )
                         elif len(batch) == 1:
                             # 1銘柄で MultiIndex でない場合、そのまま Close カラムがあるはず
-                            all_data_frames.append(batch_data[["Close"]].rename(columns={"Close": batch[0]}))
+                            all_data_frames.append(
+                                batch_data[["Close"]].rename(
+                                    columns={"Close": batch[0]}
+                                )
+                            )
                     print(f"DEBUG: Batch {i//batch_size + 1} completed successfully")
             except Exception as e:
                 print(f"ERROR: Batch {batch} failed: {e}")
@@ -213,7 +227,9 @@ class PerformanceService:
 
         # 5. 各有効日ごとに計算
         results = []
-        valid_dates = sorted(list(set(d.date() for d in prices_df.index if d.date() >= start_date)))
+        valid_dates = sorted(
+            list(set(d.date() for d in prices_df.index if d.date() >= start_date))
+        )
 
         for i in range(len(valid_dates)):
             d = valid_dates[i]
@@ -268,7 +284,9 @@ class PerformanceService:
                 if pd.isna(rate) or rate == 0:
                     rate = 1.0
 
-                diff = (float(curr_price) - float(prev_price)) * float(qty) * float(rate)
+                diff = (
+                    (float(curr_price) - float(prev_price)) * float(qty) * float(rate)
+                )
                 holding_pnl += diff
 
                 # ポートフォリオ評価額を計算（現在価格 × 数量 × 為替レート）
@@ -276,7 +294,9 @@ class PerformanceService:
 
             # B. 売却損益
             daily_realized = (
-                db.session.query(db.func.sum(RealizedPnl.realized_pnl)).filter(RealizedPnl.sell_date == d).scalar()
+                db.session.query(db.func.sum(RealizedPnl.realized_pnl))
+                .filter(RealizedPnl.sell_date == d)
+                .scalar()
             )
             realized_pnl = float(daily_realized or 0)
 
@@ -292,7 +312,11 @@ class PerformanceService:
 
                     if pd.isna(rate) or rate == 0:
                         rate = 1.0
-                    dividend_income += float(div.dividend_amount or 0) * float(qty_at_div) * float(rate)
+                    dividend_income += (
+                        float(div.dividend_amount or 0)
+                        * float(qty_at_div)
+                        * float(rate)
+                    )
 
             results.append(
                 {
@@ -345,7 +369,12 @@ class PerformanceService:
             batch = yf_tickers[i : i + batch_size]
             try:
                 batch_data = yf.download(
-                    batch, start=start_date, end=end_date, interval="1d", progress=False, auto_adjust=True
+                    batch,
+                    start=start_date,
+                    end=end_date,
+                    interval="1d",
+                    progress=False,
+                    auto_adjust=True,
                 )
                 if not batch_data.empty:
                     if isinstance(batch_data.columns, pd.MultiIndex):
@@ -353,7 +382,11 @@ class PerformanceService:
                             all_data_frames.append(batch_data["Close"])
                     else:
                         if "Close" in batch_data.columns:
-                            all_data_frames.append(batch_data[["Close"]].rename(columns={"Close": batch[0]}))
+                            all_data_frames.append(
+                                batch_data[["Close"]].rename(
+                                    columns={"Close": batch[0]}
+                                )
+                            )
             except:
                 pass
 
@@ -397,9 +430,13 @@ class PerformanceService:
             year, month = map(int, month_str.split("-"))
             month_start = datetime(year, month, 1).date()
             if month == 12:
-                calculated_month_end = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+                calculated_month_end = datetime(year + 1, 1, 1).date() - timedelta(
+                    days=1
+                )
             else:
-                calculated_month_end = datetime(year, month + 1, 1).date() - timedelta(days=1)
+                calculated_month_end = datetime(year, month + 1, 1).date() - timedelta(
+                    days=1
+                )
 
             # 現在の月の場合は、今日の日付を使用
             if year == today.year and month == today.month:
@@ -417,9 +454,13 @@ class PerformanceService:
                 if iter_date in tx_by_date:
                     for tx in tx_by_date[iter_date]:
                         if tx.transaction_type == "BUY":
-                            holdings_at_month_end[tx.ticker_symbol] += Decimal(str(tx.quantity))
+                            holdings_at_month_end[tx.ticker_symbol] += Decimal(
+                                str(tx.quantity)
+                            )
                         elif tx.transaction_type == "SELL":
-                            holdings_at_month_end[tx.ticker_symbol] -= Decimal(str(tx.quantity))
+                            holdings_at_month_end[tx.ticker_symbol] -= Decimal(
+                                str(tx.quantity)
+                            )
                 iter_date += timedelta(days=1)
 
             # 保有損益を計算
@@ -478,7 +519,9 @@ class PerformanceService:
                     # 前月から保有: 前月末価格を使用
                     try:
                         prev_ts = pd.Timestamp(prev_month_end)
-                        prev_indices = prices_df.index.get_indexer([prev_ts], method="pad")
+                        prev_indices = prices_df.index.get_indexer(
+                            [prev_ts], method="pad"
+                        )
                         prev_idx = prev_indices[0]
                         if prev_idx < 0:
                             continue
@@ -534,14 +577,20 @@ class PerformanceService:
                         if div.quantity_held > 0:
                             # 為替換算
                             rate = 1.0
-                            if div.currency == "USD" and "USDJPY=X" in prices_df.columns:
+                            if (
+                                div.currency == "USD"
+                                and "USDJPY=X" in prices_df.columns
+                            ):
                                 try:
                                     rate = prices_df.iloc[curr_idx]["USDJPY=X"]
                                     if pd.isna(rate) or rate == 0:
                                         rate = 150.0
                                 except:
                                     rate = 150.0
-                            elif div.currency == "KRW" and "KRWJPY=X" in prices_df.columns:
+                            elif (
+                                div.currency == "KRW"
+                                and "KRWJPY=X" in prices_df.columns
+                            ):
                                 try:
                                     rate = prices_df.iloc[curr_idx]["KRWJPY=X"]
                                     if pd.isna(rate) or rate == 0:
@@ -549,7 +598,11 @@ class PerformanceService:
                                 except:
                                     rate = 0.11
 
-                            dividend_jpy = float(div.dividend_amount or 0) * float(div.quantity_held) * rate
+                            dividend_jpy = (
+                                float(div.dividend_amount or 0)
+                                * float(div.quantity_held)
+                                * rate
+                            )
                             dividend_income += dividend_jpy
 
             results.append(
@@ -599,7 +652,11 @@ class PerformanceService:
         # 全取引履歴を取得
         transactions = Transaction.query.order_by(Transaction.transaction_date).all()
         if not transactions:
-            return {"holding_details": [], "realized_details": [], "dividend_details": []}
+            return {
+                "holding_details": [],
+                "realized_details": [],
+                "dividend_details": [],
+            }
 
         # 全保有銘柄を特定
         all_tickers = sorted(list(set(t.ticker_symbol for t in transactions)))
@@ -637,7 +694,12 @@ class PerformanceService:
             batch = yf_tickers[i : i + batch_size]
             try:
                 batch_data = yf.download(
-                    batch, start=start_date, end=end_date, interval="1d", progress=False, auto_adjust=True
+                    batch,
+                    start=start_date,
+                    end=end_date,
+                    interval="1d",
+                    progress=False,
+                    auto_adjust=True,
                 )
                 if not batch_data.empty:
                     if isinstance(batch_data.columns, pd.MultiIndex):
@@ -645,14 +707,26 @@ class PerformanceService:
                             all_data_frames.append(batch_data["Close"])
                     else:
                         if "Close" in batch_data.columns:
-                            all_data_frames.append(batch_data[["Close"]].rename(columns={"Close": batch[0]}))
+                            all_data_frames.append(
+                                batch_data[["Close"]].rename(
+                                    columns={"Close": batch[0]}
+                                )
+                            )
                         elif len(batch) == 1:
-                            all_data_frames.append(batch_data[["Close"]].rename(columns={"Close": batch[0]}))
+                            all_data_frames.append(
+                                batch_data[["Close"]].rename(
+                                    columns={"Close": batch[0]}
+                                )
+                            )
             except:
                 pass
 
         if not all_data_frames:
-            return {"holding_details": [], "realized_details": [], "dividend_details": []}
+            return {
+                "holding_details": [],
+                "realized_details": [],
+                "dividend_details": [],
+            }
 
         prices_df = pd.concat(all_data_frames, axis=1)
         prices_df = prices_df.loc[:, ~prices_df.columns.duplicated()]
@@ -682,7 +756,11 @@ class PerformanceService:
             curr_idx = indices[0]
 
             if curr_idx < 0:
-                return {"holding_details": [], "realized_details": [], "dividend_details": []}
+                return {
+                    "holding_details": [],
+                    "realized_details": [],
+                    "dividend_details": [],
+                }
 
             # 月次の場合は前月末の価格を取得
             if is_monthly:
@@ -692,14 +770,26 @@ class PerformanceService:
                 prev_indices = prices_df.index.get_indexer([prev_ts], method="pad")
                 prev_idx = prev_indices[0]
                 if prev_idx < 0:
-                    return {"holding_details": [], "realized_details": [], "dividend_details": []}
+                    return {
+                        "holding_details": [],
+                        "realized_details": [],
+                        "dividend_details": [],
+                    }
             else:
                 # 日次の場合は前日
                 if curr_idx <= 0:
-                    return {"holding_details": [], "realized_details": [], "dividend_details": []}
+                    return {
+                        "holding_details": [],
+                        "realized_details": [],
+                        "dividend_details": [],
+                    }
                 prev_idx = curr_idx - 1
         except:
-            return {"holding_details": [], "realized_details": [], "dividend_details": []}
+            return {
+                "holding_details": [],
+                "realized_details": [],
+                "dividend_details": [],
+            }
 
         # A. 保有損益の詳細
         holding_details = []
@@ -752,8 +842,10 @@ class PerformanceService:
                         total_qty = 0.0
                         for tx in buy_in_month:
                             # 取引日から今日までの分割調整係数を取得
-                            split_factor = PerformanceService.get_split_adjustment_factor(
-                                yf_t, tx.transaction_date, date.today()
+                            split_factor = (
+                                PerformanceService.get_split_adjustment_factor(
+                                    yf_t, tx.transaction_date, date.today()
+                                )
                             )
                             # 取得価格を分割調整
                             adjusted_price = float(tx.unit_price) / split_factor
@@ -823,7 +915,9 @@ class PerformanceService:
             ).all()
 
             # 銘柄ごとに集計
-            ticker_realized = defaultdict(lambda: {"quantity": 0, "pnl": 0, "details": []})
+            ticker_realized = defaultdict(
+                lambda: {"quantity": 0, "pnl": 0, "details": []}
+            )
             for r in monthly_realized:
                 ticker_realized[r.ticker_symbol]["quantity"] += float(r.quantity)
                 ticker_realized[r.ticker_symbol]["pnl"] += float(r.realized_pnl)
@@ -834,8 +928,12 @@ class PerformanceService:
                 security_name = tx.security_name if tx else ticker_symbol
 
                 # 平均取得単価と売却単価を計算
-                total_cost = sum(float(r.average_cost) * float(r.quantity) for r in data["details"])
-                total_sell = sum(float(r.sell_price) * float(r.quantity) for r in data["details"])
+                total_cost = sum(
+                    float(r.average_cost) * float(r.quantity) for r in data["details"]
+                )
+                total_sell = sum(
+                    float(r.sell_price) * float(r.quantity) for r in data["details"]
+                )
                 avg_cost = total_cost / data["quantity"] if data["quantity"] > 0 else 0
                 avg_sell = total_sell / data["quantity"] if data["quantity"] > 0 else 0
 
@@ -879,11 +977,14 @@ class PerformanceService:
                 month_end = datetime(year, month + 1, 1).date() - timedelta(days=1)
 
             monthly_dividends = Dividend.query.filter(
-                Dividend.ex_dividend_date >= month_start, Dividend.ex_dividend_date <= month_end
+                Dividend.ex_dividend_date >= month_start,
+                Dividend.ex_dividend_date <= month_end,
             ).all()
 
             # 銘柄ごとに集計
-            ticker_dividends = defaultdict(lambda: {"total_jpy": 0, "count": 0, "currency": None})
+            ticker_dividends = defaultdict(
+                lambda: {"total_jpy": 0, "count": 0, "currency": None}
+            )
             for div in monthly_dividends:
                 if div.quantity_held > 0:
                     # 為替換算してJPYに統一
@@ -901,7 +1002,11 @@ class PerformanceService:
                         rate = 1.0
 
                     # dividend_amount × quantity_held × 為替レート
-                    dividend_jpy = float(div.dividend_amount or 0) * float(div.quantity_held) * rate
+                    dividend_jpy = (
+                        float(div.dividend_amount or 0)
+                        * float(div.quantity_held)
+                        * rate
+                    )
                     ticker_dividends[div.ticker_symbol]["total_jpy"] += dividend_jpy
                     ticker_dividends[div.ticker_symbol]["count"] += 1
                     if ticker_dividends[div.ticker_symbol]["currency"] is None:
@@ -936,10 +1041,16 @@ class PerformanceService:
                         if pd.isna(rate) or rate == 0:
                             rate = 1.0
 
-                    tx = Transaction.query.filter_by(ticker_symbol=div.ticker_symbol).first()
+                    tx = Transaction.query.filter_by(
+                        ticker_symbol=div.ticker_symbol
+                    ).first()
                     security_name = tx.security_name if tx else div.ticker_symbol
 
-                    dividend_jpy = float(div.dividend_amount or 0) * float(qty_at_div) * float(rate)
+                    dividend_jpy = (
+                        float(div.dividend_amount or 0)
+                        * float(qty_at_div)
+                        * float(rate)
+                    )
 
                     dividend_details.append(
                         {
@@ -960,7 +1071,9 @@ class PerformanceService:
         }
 
     @staticmethod
-    def get_performance_history_with_benchmark(days=30, benchmark_keys=["TOPIX", "SP500"]):
+    def get_performance_history_with_benchmark(
+        days=30, benchmark_keys=["TOPIX", "SP500"]
+    ):
         """
         ベンチマーク比較データを含む損益推移データを取得
 
@@ -996,7 +1109,9 @@ class PerformanceService:
         """
         from app.services.benchmark_fetcher import BenchmarkFetcher
 
-        print(f"DEBUG: get_performance_history_with_benchmark called with days={days}, benchmarks={benchmark_keys}")
+        print(
+            f"DEBUG: get_performance_history_with_benchmark called with days={days}, benchmarks={benchmark_keys}"
+        )
 
         # 1. 既存のポートフォリオ損益データを取得
         portfolio_data = PerformanceService.get_performance_history(days=days)
@@ -1012,7 +1127,9 @@ class PerformanceService:
             start_date = end_date - timedelta(days=days)
 
             # 取引履歴を取得して保有状況を再計算
-            transactions = Transaction.query.order_by(Transaction.transaction_date).all()
+            transactions = Transaction.query.order_by(
+                Transaction.transaction_date
+            ).all()
             if not transactions:
                 print("DEBUG: No transactions found")
                 return {"portfolio": portfolio_data, "benchmarks": {}}
@@ -1051,9 +1168,17 @@ class PerformanceService:
                                 all_data_frames.append(batch_data["Close"])
                         else:
                             if "Close" in batch_data.columns:
-                                all_data_frames.append(batch_data[["Close"]].rename(columns={"Close": batch[0]}))
+                                all_data_frames.append(
+                                    batch_data[["Close"]].rename(
+                                        columns={"Close": batch[0]}
+                                    )
+                                )
                             elif len(batch) == 1:
-                                all_data_frames.append(batch_data[["Close"]].rename(columns={"Close": batch[0]}))
+                                all_data_frames.append(
+                                    batch_data[["Close"]].rename(
+                                        columns={"Close": batch[0]}
+                                    )
+                                )
                 except Exception as e:
                     print(f"ERROR: Batch {batch} failed: {e}")
 
@@ -1139,7 +1264,9 @@ class PerformanceService:
                     item["portfolio_value"] = round(portfolio_value, 2)
 
                 except Exception as e:
-                    print(f"ERROR: Failed to calculate portfolio value for {date_obj}: {e}")
+                    print(
+                        f"ERROR: Failed to calculate portfolio value for {date_obj}: {e}"
+                    )
                     item["portfolio_value"] = 0.0
 
         except Exception as e:
@@ -1155,10 +1282,16 @@ class PerformanceService:
         benchmarks_result = {}
 
         if benchmark_keys:
-            start_date_obj = datetime.strptime(portfolio_data[0]["date"], "%Y-%m-%d").date()
-            end_date_obj = datetime.strptime(portfolio_data[-1]["date"], "%Y-%m-%d").date()
+            start_date_obj = datetime.strptime(
+                portfolio_data[0]["date"], "%Y-%m-%d"
+            ).date()
+            end_date_obj = datetime.strptime(
+                portfolio_data[-1]["date"], "%Y-%m-%d"
+            ).date()
 
-            benchmarks_history = BenchmarkFetcher.get_multiple_benchmarks(benchmark_keys, start_date_obj, end_date_obj)
+            benchmarks_history = BenchmarkFetcher.get_multiple_benchmarks(
+                benchmark_keys, start_date_obj, end_date_obj
+            )
 
             # 4. 各ベンチマークについて損益計算
             for benchmark_key, benchmark_data in benchmarks_history.items():
@@ -1191,14 +1324,18 @@ class PerformanceService:
                         # 前日のポートフォリオ評価額を取得
                         prev_date_str = benchmark_data[i - 1]["date"].isoformat()
                         if prev_date_str in portfolio_dict:
-                            prev_portfolio_value = portfolio_dict[prev_date_str]["portfolio_value"]
+                            prev_portfolio_value = portfolio_dict[prev_date_str][
+                                "portfolio_value"
+                            ]
                             virtual_pnl = prev_portfolio_value * daily_return
 
                     # S&P500の場合、JPY換算が必要
                     if benchmark_key == "SP500":
                         # 為替レートを取得
                         try:
-                            rate_data = ExchangeRateFetcher.get_historical_rate("USD", "JPY", bench_item["date"])
+                            rate_data = ExchangeRateFetcher.get_historical_rate(
+                                "USD", "JPY", bench_item["date"]
+                            )
                             if rate_data and rate_data.get("rate"):
                                 # S&P500の変動率はそのまま、virtual_pnlは円建てポートフォリオに対する変動なのでそのまま
                                 pass
@@ -1208,7 +1345,9 @@ class PerformanceService:
                     # 累積リターン
                     cumulative_return = 0.0
                     if initial_close and initial_close > 0:
-                        cumulative_return = (close_price - initial_close) / initial_close
+                        cumulative_return = (
+                            close_price - initial_close
+                        ) / initial_close
 
                     benchmark_result.append(
                         {
@@ -1254,14 +1393,20 @@ class PerformanceService:
 
         # 取引履歴を取得
         transactions = (
-            Transaction.query.filter_by(ticker_symbol=ticker_symbol).order_by(Transaction.transaction_date).all()
+            Transaction.query.filter_by(ticker_symbol=ticker_symbol)
+            .order_by(Transaction.transaction_date)
+            .all()
         )
 
         if not transactions:
             return {"irr": None, "cash_flows": [], "error": "No transactions found"}
 
         # 配当履歴を取得
-        dividends = Dividend.query.filter_by(ticker_symbol=ticker_symbol).order_by(Dividend.ex_dividend_date).all()
+        dividends = (
+            Dividend.query.filter_by(ticker_symbol=ticker_symbol)
+            .order_by(Dividend.ex_dividend_date)
+            .all()
+        )
 
         # 保有銘柄情報を取得
         holding = Holding.query.filter_by(ticker_symbol=ticker_symbol).first()
@@ -1278,7 +1423,13 @@ class PerformanceService:
                 # 売り: 受取（プラス）
                 cf_amount = float(tx.settlement_amount or 0)
 
-            cash_flows.append({"date": tx.transaction_date, "amount": cf_amount, "type": tx.transaction_type})
+            cash_flows.append(
+                {
+                    "date": tx.transaction_date,
+                    "amount": cf_amount,
+                    "type": tx.transaction_type,
+                }
+            )
 
         # 配当のキャッシュフロー（円換算）
         for div in dividends:
@@ -1296,18 +1447,34 @@ class PerformanceService:
                     except Exception:
                         pass  # レート取得失敗時はそのまま
 
-                cash_flows.append({"date": div.ex_dividend_date, "amount": div_amount, "type": "DIVIDEND"})
+                cash_flows.append(
+                    {
+                        "date": div.ex_dividend_date,
+                        "amount": div_amount,
+                        "type": "DIVIDEND",
+                    }
+                )
 
         # 現在の評価額を最終キャッシュフローとして追加
         if holding and holding.current_value:
             current_value = float(holding.current_value)
-            cash_flows.append({"date": date_class.today(), "amount": current_value, "type": "CURRENT_VALUE"})
+            cash_flows.append(
+                {
+                    "date": date_class.today(),
+                    "amount": current_value,
+                    "type": "CURRENT_VALUE",
+                }
+            )
 
         # 日付順でソート
         cash_flows.sort(key=lambda x: x["date"])
 
         if len(cash_flows) < 2:
-            return {"irr": None, "cash_flows": cash_flows, "error": "Insufficient cash flows"}
+            return {
+                "irr": None,
+                "cash_flows": cash_flows,
+                "error": "Insufficient cash flows",
+            }
 
         # XIRRを計算（日付を考慮したIRR）
         try:
@@ -1423,7 +1590,10 @@ class PerformanceService:
 
         for holding in holdings:
             result = PerformanceService.calculate_irr_for_holding(holding.ticker_symbol)
-            results[holding.ticker_symbol] = {"irr": result["irr"], "error": result["error"]}
+            results[holding.ticker_symbol] = {
+                "irr": result["irr"],
+                "error": result["error"],
+            }
 
         return results
 
@@ -1444,7 +1614,9 @@ class PerformanceService:
 
         # 取引履歴を取得
         transactions = (
-            Transaction.query.filter_by(ticker_symbol=ticker_symbol).order_by(Transaction.transaction_date).all()
+            Transaction.query.filter_by(ticker_symbol=ticker_symbol)
+            .order_by(Transaction.transaction_date)
+            .all()
         )
 
         if not transactions:
@@ -1453,10 +1625,18 @@ class PerformanceService:
         # 売却取引があるか確認
         sell_transactions = [tx for tx in transactions if tx.transaction_type == "SELL"]
         if not sell_transactions:
-            return {"irr": None, "cash_flows": [], "error": "No sell transactions (not realized)"}
+            return {
+                "irr": None,
+                "cash_flows": [],
+                "error": "No sell transactions (not realized)",
+            }
 
         # 配当履歴を取得
-        dividends = Dividend.query.filter_by(ticker_symbol=ticker_symbol).order_by(Dividend.ex_dividend_date).all()
+        dividends = (
+            Dividend.query.filter_by(ticker_symbol=ticker_symbol)
+            .order_by(Dividend.ex_dividend_date)
+            .all()
+        )
 
         # キャッシュフローを日付順にまとめる
         cash_flows = []
@@ -1468,7 +1648,13 @@ class PerformanceService:
             else:  # SELL
                 cf_amount = float(tx.settlement_amount or 0)
 
-            cash_flows.append({"date": tx.transaction_date, "amount": cf_amount, "type": tx.transaction_type})
+            cash_flows.append(
+                {
+                    "date": tx.transaction_date,
+                    "amount": cf_amount,
+                    "type": tx.transaction_type,
+                }
+            )
 
         # 配当のキャッシュフロー（円換算）
         for div in dividends:
@@ -1484,13 +1670,23 @@ class PerformanceService:
                     except Exception:
                         pass
 
-                cash_flows.append({"date": div.ex_dividend_date, "amount": div_amount, "type": "DIVIDEND"})
+                cash_flows.append(
+                    {
+                        "date": div.ex_dividend_date,
+                        "amount": div_amount,
+                        "type": "DIVIDEND",
+                    }
+                )
 
         # 日付順でソート
         cash_flows.sort(key=lambda x: x["date"])
 
         if len(cash_flows) < 2:
-            return {"irr": None, "cash_flows": cash_flows, "error": "Insufficient cash flows"}
+            return {
+                "irr": None,
+                "cash_flows": cash_flows,
+                "error": "Insufficient cash flows",
+            }
 
         # XIRRを計算
         try:

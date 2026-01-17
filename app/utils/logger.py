@@ -23,7 +23,10 @@ def setup_logger(app):
     log_file = log_dir / f"app_{datetime.now().strftime('%Y%m%d')}.log"
 
     # ログフォーマット
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     # ファイルハンドラー
     file_handler = logging.FileHandler(log_file, encoding="utf-8")
@@ -42,11 +45,15 @@ def setup_logger(app):
 
     # 既存のハンドラーを削除（重複防止）
     if app.logger.hasHandlers():
-        for handler in app.logger.handlers[:-2]:  # 最後の2つ（上で追加したもの）以外を削除
+        for handler in app.logger.handlers[
+            :-2
+        ]:  # 最後の2つ（上で追加したもの）以外を削除
             app.logger.removeHandler(handler)
 
     app.logger.info("=" * 70)
-    app.logger.info(f"Application started - Environment: {os.environ.get('FLASK_ENV', 'development')}")
+    app.logger.info(
+        f"Application started - Environment: {os.environ.get('FLASK_ENV', 'development')}"
+    )
     app.logger.info("=" * 70)
 
     return app.logger
@@ -74,7 +81,8 @@ def get_logger(name):
 
         # フォーマッター
         formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
         )
 
         # ファイルハンドラー
@@ -136,7 +144,9 @@ def log_database_operation(logger, operation, table, details=None, error=None):
         logger.info(log_msg)
 
 
-def log_external_api_call(logger, service, endpoint, params=None, success=True, error=None):
+def log_external_api_call(
+    logger, service, endpoint, params=None, success=True, error=None
+):
     """
     外部API呼び出しをログに記録
 

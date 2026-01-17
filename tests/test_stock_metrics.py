@@ -113,7 +113,11 @@ class TestStockMetricsModel:
         """ティッカーシンボルのユニーク制約テスト"""
         with app.app_context():
             metrics1 = StockMetrics(
-                ticker_symbol="MSFT", market_cap=2500000000000, beta=0.9, currency="USD", last_updated=datetime.utcnow()
+                ticker_symbol="MSFT",
+                market_cap=2500000000000,
+                beta=0.9,
+                currency="USD",
+                last_updated=datetime.utcnow(),
             )
             db.session.add(metrics1)
             db.session.commit()

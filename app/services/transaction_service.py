@@ -29,7 +29,9 @@ class TransactionService:
         errors = []
 
         # 日付順にソート（移動平均法の正確な計算のため）
-        sorted_data = sorted(transactions_data, key=lambda x: x.get("transaction_date", ""))
+        sorted_data = sorted(
+            transactions_data, key=lambda x: x.get("transaction_date", "")
+        )
 
         for data in sorted_data:
             try:
@@ -42,8 +44,12 @@ class TransactionService:
                 ).first()
 
                 if existing:
-                    logger.warning(f"重複取引をスキップ: {data.get('ticker_symbol')} {data.get('transaction_date')}")
-                    errors.append({"data": data, "error": "重複する取引が既に存在します"})
+                    logger.warning(
+                        f"重複取引をスキップ: {data.get('ticker_symbol')} {data.get('transaction_date')}"
+                    )
+                    errors.append(
+                        {"data": data, "error": "重複する取引が既に存在します"}
+                    )
                     failed_count += 1
                     continue
 
@@ -56,7 +62,10 @@ class TransactionService:
 
                 db.session.commit()
                 log_database_operation(
-                    logger, "INSERT", "transactions", f"{data.get('ticker_symbol')} - {data.get('transaction_type')}"
+                    logger,
+                    "INSERT",
+                    "transactions",
+                    f"{data.get('ticker_symbol')} - {data.get('transaction_type')}",
                 )
                 success_count += 1
 
@@ -73,7 +82,9 @@ class TransactionService:
     @staticmethod
     def _update_holding(transaction):
         """保有銘柄を更新（移動平均法）"""
-        holding = Holding.query.filter_by(ticker_symbol=transaction.ticker_symbol).first()
+        holding = Holding.query.filter_by(
+            ticker_symbol=transaction.ticker_symbol
+        ).first()
 
         if transaction.transaction_type == "BUY":
             # 買付処理
@@ -81,7 +92,10 @@ class TransactionService:
             transaction_cost = (
                 transaction.settlement_amount
                 if transaction.settlement_amount
-                else (transaction.quantity * transaction.unit_price + (transaction.commission or 0))
+                else (
+                    transaction.quantity * transaction.unit_price
+                    + (transaction.commission or 0)
+                )
             )
 
             if holding:
@@ -106,15 +120,21 @@ class TransactionService:
         elif transaction.transaction_type == "SELL":
             # 売却処理
             if not holding:
-                raise ValueError(f"保有していない銘柄を売却しようとしています: {transaction.ticker_symbol}")
+                raise ValueError(
+                    f"保有していない銘柄を売却しようとしています: {transaction.ticker_symbol}"
+                )
 
             if holding.total_quantity < transaction.quantity:
-                raise ValueError(f"保有数量が不足しています: {transaction.ticker_symbol}")
+                raise ValueError(
+                    f"保有数量が不足しています: {transaction.ticker_symbol}"
+                )
 
             # 確定損益を計算 (JPYベース)
             # transaction.settlement_amount は常に受渡金額 (JPY)
             sell_proceeds_jpy = Decimal(str(transaction.settlement_amount or 0))
-            cost_basis_jpy = Decimal(str(holding.average_cost or 0)) * Decimal(str(transaction.quantity or 0))
+            cost_basis_jpy = Decimal(str(holding.average_cost or 0)) * Decimal(
+                str(transaction.quantity or 0)
+            )
             realized_pnl = sell_proceeds_jpy - cost_basis_jpy
 
             realized_pnl_pct = None
@@ -149,7 +169,10 @@ class TransactionService:
         """重複チェック"""
         return (
             Transaction.query.filter_by(
-                transaction_date=transaction_date, ticker_symbol=ticker_symbol, quantity=quantity, unit_price=unit_price
+                transaction_date=transaction_date,
+                ticker_symbol=ticker_symbol,
+                quantity=quantity,
+                unit_price=unit_price,
             ).first()
             is not None
         )
@@ -170,7 +193,9 @@ class TransactionService:
 
         # 取引履歴を日付順に取得
         transactions = (
-            Transaction.query.filter_by(ticker_symbol=ticker_symbol).order_by(Transaction.transaction_date).all()
+            Transaction.query.filter_by(ticker_symbol=ticker_symbol)
+            .order_by(Transaction.transaction_date)
+            .all()
         )
 
         if not transactions:
@@ -187,13 +212,18 @@ class TransactionService:
                 transaction_cost = (
                     transaction.settlement_amount
                     if transaction.settlement_amount
-                    else (transaction.quantity * transaction.unit_price + (transaction.commission or 0))
+                    else (
+                        transaction.quantity * transaction.unit_price
+                        + (transaction.commission or 0)
+                    )
                 )
 
                 if current_holding:
                     # 平均単価を更新（移動平均法）
                     total_cost = current_holding["total_cost"] + transaction_cost
-                    total_quantity = current_holding["total_quantity"] + transaction.quantity
+                    total_quantity = (
+                        current_holding["total_quantity"] + transaction.quantity
+                    )
                     current_holding["average_cost"] = total_cost / total_quantity
                     current_holding["total_quantity"] = total_quantity
                     current_holding["total_cost"] = total_cost
@@ -209,16 +239,19 @@ class TransactionService:
                     }
 
             elif transaction.transaction_type == "SELL":
-                if not current_holding or current_holding["total_quantity"] < transaction.quantity:
+                if (
+                    not current_holding
+                    or current_holding["total_quantity"] < transaction.quantity
+                ):
                     # データ不整合の場合はスキップ
                     continue
 
                 # 確定損益を計算 (JPYベース)
                 # transaction.settlement_amount は常に受渡金額 (JPY)
                 sell_proceeds_jpy = Decimal(str(transaction.settlement_amount or 0))
-                cost_basis_jpy = Decimal(str(current_holding["average_cost"] or 0)) * Decimal(
-                    str(transaction.quantity or 0)
-                )
+                cost_basis_jpy = Decimal(
+                    str(current_holding["average_cost"] or 0)
+                ) * Decimal(str(transaction.quantity or 0))
                 realized_pnl = sell_proceeds_jpy - cost_basis_jpy
 
                 realized_pnl_pct = None
@@ -242,7 +275,9 @@ class TransactionService:
 
                 # 保有数量を減少
                 current_holding["total_quantity"] -= transaction.quantity
-                current_holding["total_cost"] = current_holding["total_quantity"] * current_holding["average_cost"]
+                current_holding["total_cost"] = (
+                    current_holding["total_quantity"] * current_holding["average_cost"]
+                )
 
                 # 保有数量が0になった場合
                 if current_holding["total_quantity"] == 0:

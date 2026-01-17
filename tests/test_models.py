@@ -52,7 +52,7 @@ class TestTransaction:
         assert aapl_transactions[0].security_name == "Apple Inc."
 
         # 買付取引のみ
-        buy_transactions = Transaction.query.filter_by(transaction_type="買付").all()
+        buy_transactions = Transaction.query.filter_by(transaction_type="BUY").all()
         assert len(buy_transactions) == 2
 
     def test_transaction_update(self, db_session, sample_transactions):

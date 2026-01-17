@@ -68,12 +68,20 @@ class StockMetrics(db.Model):
             "ev_to_ebitda": float(self.ev_to_ebitda) if self.ev_to_ebitda else None,
             "revenue": float(self.revenue) if self.revenue else None,
             "profit_margin": float(self.profit_margin) if self.profit_margin else None,
-            "fifty_two_week_low": float(self.fifty_two_week_low) if self.fifty_two_week_low else None,
-            "fifty_two_week_high": float(self.fifty_two_week_high) if self.fifty_two_week_high else None,
+            "fifty_two_week_low": (
+                float(self.fifty_two_week_low) if self.fifty_two_week_low else None
+            ),
+            "fifty_two_week_high": (
+                float(self.fifty_two_week_high) if self.fifty_two_week_high else None
+            ),
             "ytd_return": float(self.ytd_return) if self.ytd_return else None,
-            "one_year_return": float(self.one_year_return) if self.one_year_return else None,
+            "one_year_return": (
+                float(self.one_year_return) if self.one_year_return else None
+            ),
             "currency": self.currency,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "last_updated": (
+                self.last_updated.isoformat() if self.last_updated else None
+            ),
         }
 
     def __repr__(self):

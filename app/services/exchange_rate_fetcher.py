@@ -51,7 +51,12 @@ class ExchangeRateFetcher:
         """
         # Same currency
         if from_currency == to_currency:
-            return {"rate": 1.0, "from": from_currency, "to": to_currency, "timestamp": datetime.now()}
+            return {
+                "rate": 1.0,
+                "from": from_currency,
+                "to": to_currency,
+                "timestamp": datetime.now(),
+            }
 
         # JPY to other currency (inverse)
         if from_currency == "JPY" and to_currency in ExchangeRateFetcher.CURRENCY_PAIRS:
@@ -101,7 +106,9 @@ class ExchangeRateFetcher:
             }
 
         except Exception as e:
-            print(f"Error fetching exchange rate for {from_currency}/{to_currency}: {e}")
+            print(
+                f"Error fetching exchange rate for {from_currency}/{to_currency}: {e}"
+            )
             return None
 
     @staticmethod
@@ -212,5 +219,7 @@ class ExchangeRateFetcher:
             }
 
         except Exception as e:
-            print(f"Error fetching historical rate for {from_currency}/{to_currency} on {date}: {e}")
+            print(
+                f"Error fetching historical rate for {from_currency}/{to_currency} on {date}: {e}"
+            )
             return None

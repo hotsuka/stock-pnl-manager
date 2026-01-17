@@ -20,7 +20,9 @@ class RealizedPnl(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):
-        return f"<RealizedPnl {self.ticker_symbol} {self.sell_date} {self.realized_pnl}>"
+        return (
+            f"<RealizedPnl {self.ticker_symbol} {self.sell_date} {self.realized_pnl}>"
+        )
 
     def to_dict(self):
         """辞書形式に変換"""
@@ -32,7 +34,9 @@ class RealizedPnl(db.Model):
             "average_cost": float(self.average_cost) if self.average_cost else 0,
             "sell_price": float(self.sell_price) if self.sell_price else 0,
             "realized_pnl": float(self.realized_pnl) if self.realized_pnl else 0,
-            "realized_pnl_pct": float(self.realized_pnl_pct) if self.realized_pnl_pct else None,
+            "realized_pnl_pct": (
+                float(self.realized_pnl_pct) if self.realized_pnl_pct else None
+            ),
             "commission": float(self.commission) if self.commission else 0,
             "currency": self.currency,
             "created_at": self.created_at.isoformat() if self.created_at else None,

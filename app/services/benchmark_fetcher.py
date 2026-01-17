@@ -30,8 +30,18 @@ class BenchmarkFetcher:
             "currency": "JPY",
             "country": "Japan",
         },
-        "SP500": {"ticker": "^GSPC", "name": "S&P 500", "currency": "USD", "country": "USA"},
-        "N225": {"ticker": "^N225", "name": "日経平均225", "currency": "JPY", "country": "Japan"},
+        "SP500": {
+            "ticker": "^GSPC",
+            "name": "S&P 500",
+            "currency": "USD",
+            "country": "USA",
+        },
+        "N225": {
+            "ticker": "^N225",
+            "name": "日経平均225",
+            "currency": "JPY",
+            "country": "Japan",
+        },
     }
 
     @staticmethod
@@ -57,7 +67,9 @@ class BenchmarkFetcher:
         # キャッシュチェック
         if use_cache:
             today = datetime.now().date()
-            cached = BenchmarkPrice.query.filter_by(benchmark_key=benchmark_key, price_date=today).first()
+            cached = BenchmarkPrice.query.filter_by(
+                benchmark_key=benchmark_key, price_date=today
+            ).first()
 
             if cached:
                 logger.info(f"Benchmark price loaded from cache: {benchmark_key}")
@@ -67,7 +79,9 @@ class BenchmarkFetcher:
                     "name": benchmark["name"],
                     "price": float(cached.close_price),
                     "currency": cached.currency,
-                    "previous_close": float(cached.previous_close) if cached.previous_close else None,
+                    "previous_close": (
+                        float(cached.previous_close) if cached.previous_close else None
+                    ),
                     "timestamp": cached.created_at,
                 }
 
@@ -85,14 +99,20 @@ class BenchmarkFetcher:
                 price = info.get("currentPrice") or info.get("regularMarketPrice")
                 previous_close = info.get("previousClose")
             except Exception as info_error:
-                logger.warning(f"Info fetch failed for {ticker_symbol}, fallback to history: {info_error}")
+                logger.warning(
+                    f"Info fetch failed for {ticker_symbol}, fallback to history: {info_error}"
+                )
 
             # history フォールバック
             if price is None:
                 hist = ticker.history(period="5d")
                 if hist.empty:
                     log_external_api_call(
-                        logger, "yfinance", f"get_benchmark/{ticker_symbol}", success=False, error="履歴データが空"
+                        logger,
+                        "yfinance",
+                        f"get_benchmark/{ticker_symbol}",
+                        success=False,
+                        error="履歴データが空",
                     )
                     return None
 
@@ -110,10 +130,14 @@ class BenchmarkFetcher:
                 )
                 return None
 
-            log_external_api_call(logger, "yfinance", f"get_benchmark/{ticker_symbol}", success=True)
+            log_external_api_call(
+                logger, "yfinance", f"get_benchmark/{ticker_symbol}", success=True
+            )
 
             # キャッシュに保存
-            BenchmarkFetcher._cache_benchmark(benchmark_key, price, benchmark["currency"], previous_close)
+            BenchmarkFetcher._cache_benchmark(
+                benchmark_key, price, benchmark["currency"], previous_close
+            )
 
             return {
                 "benchmark_key": benchmark_key,
@@ -127,7 +151,13 @@ class BenchmarkFetcher:
 
         except Exception as e:
             logger.error(f"Error fetching benchmark price ({benchmark_key}): {str(e)}")
-            log_external_api_call(logger, "yfinance", f"get_benchmark/{ticker_symbol}", success=False, error=str(e))
+            log_external_api_call(
+                logger,
+                "yfinance",
+                f"get_benchmark/{ticker_symbol}",
+                success=False,
+                error=str(e),
+            )
             return None
 
     @staticmethod
@@ -164,7 +194,9 @@ class BenchmarkFetcher:
         # キャッシュが十分にあるかチェック（期待日数の80%以上）
         expected_days = (end_date - start_date).days + 1
         if len(cached_data) >= expected_days * 0.8:
-            logger.info(f"Benchmark historical data loaded from cache: {benchmark_key} ({len(cached_data)} days)")
+            logger.info(
+                f"Benchmark historical data loaded from cache: {benchmark_key} ({len(cached_data)} days)"
+            )
             result = []
             for i, item in enumerate(cached_data):
                 result.append(
@@ -174,7 +206,9 @@ class BenchmarkFetcher:
                         "previous_close": (
                             float(item.previous_close)
                             if item.previous_close
-                            else (float(cached_data[i - 1].close_price) if i > 0 else None)
+                            else (
+                                float(cached_data[i - 1].close_price) if i > 0 else None
+                            )
                         ),
                     }
                 )
@@ -217,18 +251,32 @@ class BenchmarkFetcher:
 
                 # キャッシュに保存
                 BenchmarkFetcher._cache_benchmark(
-                    benchmark_key, close_price, benchmark["currency"], previous_close_value, price_date
+                    benchmark_key,
+                    close_price,
+                    benchmark["currency"],
+                    previous_close_value,
+                    price_date,
                 )
 
-                result.append({"date": price_date, "close": close_price, "previous_close": previous_close_value})
+                result.append(
+                    {
+                        "date": price_date,
+                        "close": close_price,
+                        "previous_close": previous_close_value,
+                    }
+                )
 
                 previous_close_value = close_price
 
-            logger.info(f"Benchmark historical data fetched: {benchmark_key} ({len(result)} days)")
+            logger.info(
+                f"Benchmark historical data fetched: {benchmark_key} ({len(result)} days)"
+            )
             return result
 
         except Exception as e:
-            logger.error(f"Error fetching benchmark historical data ({benchmark_key}): {str(e)}")
+            logger.error(
+                f"Error fetching benchmark historical data ({benchmark_key}): {str(e)}"
+            )
             log_external_api_call(
                 logger,
                 "yfinance",
@@ -264,7 +312,9 @@ class BenchmarkFetcher:
         return result
 
     @staticmethod
-    def _cache_benchmark(benchmark_key, price, currency, previous_close=None, price_date=None):
+    def _cache_benchmark(
+        benchmark_key, price, currency, previous_close=None, price_date=None
+    ):
         """
         ベンチマーク指数をキャッシュに保存
 
@@ -279,7 +329,9 @@ class BenchmarkFetcher:
             price_date = datetime.now().date()
 
         try:
-            existing = BenchmarkPrice.query.filter_by(benchmark_key=benchmark_key, price_date=price_date).first()
+            existing = BenchmarkPrice.query.filter_by(
+                benchmark_key=benchmark_key, price_date=price_date
+            ).first()
 
             if existing:
                 # 既存レコードを更新
@@ -293,7 +345,11 @@ class BenchmarkFetcher:
                     price_date=price_date,
                     close_price=Decimal(str(price)),
                     currency=currency,
-                    previous_close=Decimal(str(previous_close)) if previous_close is not None else None,
+                    previous_close=(
+                        Decimal(str(previous_close))
+                        if previous_close is not None
+                        else None
+                    ),
                 )
                 db.session.add(bp)
 
@@ -301,7 +357,9 @@ class BenchmarkFetcher:
 
         except IntegrityError as e:
             db.session.rollback()
-            logger.debug(f"Benchmark price already cached (race condition): {benchmark_key} {price_date}")
+            logger.debug(
+                f"Benchmark price already cached (race condition): {benchmark_key} {price_date}"
+            )
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error caching benchmark price: {e}")

@@ -6,4 +6,12 @@ from app.models.realized_pnl import RealizedPnl
 from app.models.stock_metrics import StockMetrics
 from app.models.benchmark_price import BenchmarkPrice
 
-__all__ = ["Transaction", "Holding", "Dividend", "StockPrice", "RealizedPnl", "StockMetrics", "BenchmarkPrice"]
+__all__ = [
+    "Transaction",
+    "Holding",
+    "Dividend",
+    "StockPrice",
+    "RealizedPnl",
+    "StockMetrics",
+    "BenchmarkPrice",
+]

@@ -36,8 +36,8 @@ class TestTransactionService:
         holding = Holding.query.filter_by(ticker_symbol="7203").first()
         assert holding is not None
         assert holding.total_quantity == 100
-        assert holding.total_cost == 250100.0
-        assert abs(holding.average_cost - 2501.0) < 0.01
+        assert float(holding.total_cost) == 250100.0
+        assert abs(float(holding.average_cost) - 2501.0) < 0.01
 
     def test_calculate_average_cost_multiple_buys(self, db_session):
         """複数回買付の平均取得単価計算テスト（加重平均）"""
@@ -76,9 +76,9 @@ class TestTransactionService:
         assert holding is not None
         assert holding.total_quantity == 150
         # 総コスト = 200,100 + 110,050 = 310,150
-        assert abs(holding.total_cost - 310150.0) < 0.01
+        assert abs(float(holding.total_cost) - 310150.0) < 0.01
         # 平均単価 = 310,150 / 150 = 2,067.67
-        assert abs(holding.average_cost - 2067.67) < 0.01
+        assert abs(float(holding.average_cost) - 2067.67) < 0.01
 
     def test_sell_transaction_reduces_holding(self, db_session):
         """売却取引で保有数量が減少することをテスト"""
@@ -169,7 +169,7 @@ class TestTransactionService:
         assert realized is not None
         assert realized.quantity == 100
         # 実現損益 = 売却額 - 取得コスト = 549,700 - 500,500 = 49,200
-        assert abs(realized.realized_pnl - 49200.0) < 0.01
+        assert abs(float(realized.realized_pnl) - 49200.0) < 0.01
 
     def test_partial_sell_updates_average_cost(self, db_session):
         """部分売却で平均取得単価が維持されることをテスト"""
@@ -214,7 +214,7 @@ class TestTransactionService:
         holding_after = Holding.query.filter_by(ticker_symbol="8306").first()
         assert holding_after.total_quantity == 300
         # 平均単価は売却前と同じ
-        assert abs(holding_after.average_cost - avg_cost_before) < 0.01
+        assert abs(float(holding_after.average_cost) - float(avg_cost_before)) < 0.01
 
     def test_recalculate_multiple_transactions(self, db_session, sample_transactions):
         """複数取引がある場合の再計算テスト"""
@@ -256,7 +256,7 @@ class TestTransactionService:
         assert holding.total_quantity == 10
         # 平均単価 = (140 * 10 + 5) / 10 = 140.5 USD
         # ただし、settlement_amountはJPY建てなので、実際の計算はDB側で行われる
-        assert holding.total_cost == 210005.0
+        assert float(holding.total_cost) == 210005.0
 
     def test_empty_ticker_returns_none(self, db_session):
         """存在しない銘柄の再計算"""

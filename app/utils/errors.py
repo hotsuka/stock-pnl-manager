@@ -103,7 +103,9 @@ def handle_405_error(error):
 
     # APIリクエストの場合はJSONで返す
     if request.path.startswith("/api/"):
-        response = jsonify({"success": False, "error": "許可されていないHTTPメソッドです"})
+        response = jsonify(
+            {"success": False, "error": "許可されていないHTTPメソッドです"}
+        )
         response.status_code = 405
         return response
 
@@ -149,11 +151,13 @@ def validate_positive_number(value, field_name):
         num = float(value)
         if num <= 0:
             raise ValidationError(
-                message=f"{field_name}は正の数値である必要があります", payload={"field": field_name, "value": value}
+                message=f"{field_name}は正の数値である必要があります",
+                payload={"field": field_name, "value": value},
             )
     except (TypeError, ValueError):
         raise ValidationError(
-            message=f"{field_name}は数値である必要があります", payload={"field": field_name, "value": value}
+            message=f"{field_name}は数値である必要があります",
+            payload={"field": field_name, "value": value},
         )
 
 
