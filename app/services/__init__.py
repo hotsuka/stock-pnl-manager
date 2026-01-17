@@ -7,11 +7,11 @@ from app.services.performance_service import PerformanceService
 from app.services.stock_metrics_fetcher import StockMetricsFetcher
 
 __all__ = [
-    'CSVParser',
-    'TransactionService',
-    'StockPriceFetcher',
-    'ExchangeRateFetcher',
-    'DividendFetcher',
-    'PerformanceService',
-    'StockMetricsFetcher'
+    "CSVParser",
+    "TransactionService",
+    "StockPriceFetcher",
+    "ExchangeRateFetcher",
+    "DividendFetcher",
+    "PerformanceService",
+    "StockMetricsFetcher",
 ]

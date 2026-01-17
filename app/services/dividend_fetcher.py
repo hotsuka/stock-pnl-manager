@@ -19,10 +19,11 @@ from app.models.holding import Holding
 
 # Disable SSL verification to work around Japanese username path issue
 import os
-os.environ['PYTHONHTTPSVERIFY'] = '0'
-os.environ['CURL_CA_BUNDLE'] = ''
-os.environ['REQUESTS_CA_BUNDLE'] = ''
-os.environ['SSL_CERT_FILE'] = ''
+
+os.environ["PYTHONHTTPSVERIFY"] = "0"
+os.environ["CURL_CA_BUNDLE"] = ""
+os.environ["REQUESTS_CA_BUNDLE"] = ""
+os.environ["SSL_CERT_FILE"] = ""
 ssl._create_default_https_context = ssl._create_unverified_context
 
 
@@ -45,16 +46,19 @@ class DividendFetcher:
         from decimal import Decimal
 
         # Get all transactions up to and including the target date
-        transactions = Transaction.query.filter(
-            Transaction.ticker_symbol == ticker_symbol,
-            Transaction.transaction_date <= target_date
-        ).order_by(Transaction.transaction_date).all()
+        transactions = (
+            Transaction.query.filter(
+                Transaction.ticker_symbol == ticker_symbol, Transaction.transaction_date <= target_date
+            )
+            .order_by(Transaction.transaction_date)
+            .all()
+        )
 
-        quantity = Decimal('0')
+        quantity = Decimal("0")
         for tx in transactions:
-            if tx.transaction_type == 'BUY':
+            if tx.transaction_type == "BUY":
                 quantity += Decimal(str(tx.quantity))
-            elif tx.transaction_type == 'SELL':
+            elif tx.transaction_type == "SELL":
                 quantity -= Decimal(str(tx.quantity))
 
         return float(quantity)
@@ -90,7 +94,8 @@ class DividendFetcher:
 
             # Filter by date range - make sure dates are timezone-aware if dividends.index is
             import pandas as pd
-            if hasattr(dividends.index, 'tz') and dividends.index.tz is not None:
+
+            if hasattr(dividends.index, "tz") and dividends.index.tz is not None:
                 # dividends.index is timezone-aware, so convert our dates
                 start_date_tz = pd.Timestamp(start_date).tz_localize(dividends.index.tz)
                 end_date_tz = pd.Timestamp(end_date).tz_localize(dividends.index.tz)
@@ -100,17 +105,14 @@ class DividendFetcher:
                 dividends = dividends[(dividends.index >= start_date) & (dividends.index <= end_date)]
 
             # Get currency
-            currency = stock.info.get('currency', 'USD') if hasattr(stock, 'info') else 'USD'
+            currency = stock.info.get("currency", "USD") if hasattr(stock, "info") else "USD"
 
             # Convert to list of dicts
             dividend_list = []
             for date, amount in dividends.items():
-                dividend_list.append({
-                    'ex_date': date.date(),
-                    'amount': float(amount),
-                    'currency': currency,
-                    'source': 'yahoo_finance'
-                })
+                dividend_list.append(
+                    {"ex_date": date.date(), "amount": float(amount), "currency": currency, "source": "yahoo_finance"}
+                )
 
             return dividend_list
 
@@ -133,65 +135,49 @@ class DividendFetcher:
         # Fetch from Yahoo Finance
         dividends = DividendFetcher.fetch_dividends_yahoo(ticker_symbol)
 
-        results = {
-            'ticker': ticker_symbol,
-            'total': len(dividends),
-            'new': 0,
-            'existing': 0,
-            'errors': []
-        }
+        results = {"ticker": ticker_symbol, "total": len(dividends), "new": 0, "existing": 0, "errors": []}
 
         for div_data in dividends:
             try:
                 # Check if dividend already exists
                 existing = Dividend.query.filter_by(
-                    ticker_symbol=ticker_symbol,
-                    ex_dividend_date=div_data['ex_date']
+                    ticker_symbol=ticker_symbol, ex_dividend_date=div_data["ex_date"]
                 ).first()
 
                 if existing:
                     # Update existing dividend - recalculate quantity at ex-dividend date
-                    quantity_held = DividendFetcher._calculate_quantity_at_date(
-                        ticker_symbol,
-                        div_data['ex_date']
-                    )
-                    existing.dividend_amount = div_data['amount']
-                    existing.currency = div_data['currency']
-                    existing.source = div_data['source']
+                    quantity_held = DividendFetcher._calculate_quantity_at_date(ticker_symbol, div_data["ex_date"])
+                    existing.dividend_amount = div_data["amount"]
+                    existing.currency = div_data["currency"]
+                    existing.source = div_data["source"]
                     existing.quantity_held = quantity_held
-                    existing.total_dividend = float(div_data['amount']) * quantity_held
-                    results['existing'] += 1
+                    existing.total_dividend = float(div_data["amount"]) * quantity_held
+                    results["existing"] += 1
                 else:
                     # Calculate quantity held at ex-dividend date
-                    quantity_held = DividendFetcher._calculate_quantity_at_date(
-                        ticker_symbol,
-                        div_data['ex_date']
-                    )
+                    quantity_held = DividendFetcher._calculate_quantity_at_date(ticker_symbol, div_data["ex_date"])
 
                     # Create new dividend record
                     dividend = Dividend(
                         ticker_symbol=ticker_symbol,
-                        ex_dividend_date=div_data['ex_date'],
-                        dividend_amount=div_data['amount'],
-                        currency=div_data['currency'],
+                        ex_dividend_date=div_data["ex_date"],
+                        dividend_amount=div_data["amount"],
+                        currency=div_data["currency"],
                         quantity_held=quantity_held,
-                        total_dividend=float(div_data['amount']) * quantity_held,
-                        source=div_data['source']
+                        total_dividend=float(div_data["amount"]) * quantity_held,
+                        source=div_data["source"],
                     )
                     db.session.add(dividend)
-                    results['new'] += 1
+                    results["new"] += 1
 
             except Exception as e:
-                results['errors'].append({
-                    'date': div_data['ex_date'],
-                    'error': str(e)
-                })
+                results["errors"].append({"date": div_data["ex_date"], "error": str(e)})
 
         try:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            results['errors'].append({'error': f'Database commit failed: {str(e)}'})
+            results["errors"].append({"error": f"Database commit failed: {str(e)}"})
 
         return results
 
@@ -221,25 +207,17 @@ class DividendFetcher:
             if t.ticker_symbol not in ticker_info:
                 ticker_info[t.ticker_symbol] = t.security_name
 
-        results = {
-            'total_holdings': len(ticker_info),
-            'success': 0,
-            'failed': 0,
-            'details': []
-        }
+        results = {"total_holdings": len(ticker_info), "success": 0, "failed": 0, "details": []}
 
         for ticker_symbol, security_name in ticker_info.items():
-            div_result = DividendFetcher.save_dividends_to_db(
-                ticker_symbol,
-                security_name
-            )
+            div_result = DividendFetcher.save_dividends_to_db(ticker_symbol, security_name)
 
-            if div_result['errors']:
-                results['failed'] += 1
+            if div_result["errors"]:
+                results["failed"] += 1
             else:
-                results['success'] += 1
+                results["success"] += 1
 
-            results['details'].append(div_result)
+            results["details"].append(div_result)
 
         return results
 
@@ -269,28 +247,20 @@ class DividendFetcher:
 
         dividends = query.all()
 
-        results = {
-            'total_count': len(dividends),
-            'by_currency': {},
-            'by_ticker': {}
-        }
+        results = {"total_count": len(dividends), "by_currency": {}, "by_ticker": {}}
 
         for div in dividends:
             # Sum by currency
-            currency = div.currency or 'USD'
-            if currency not in results['by_currency']:
-                results['by_currency'][currency] = 0
-            results['by_currency'][currency] += float(div.total_dividend or 0)
+            currency = div.currency or "USD"
+            if currency not in results["by_currency"]:
+                results["by_currency"][currency] = 0
+            results["by_currency"][currency] += float(div.total_dividend or 0)
 
             # Sum by ticker
-            if div.ticker_symbol not in results['by_ticker']:
-                results['by_ticker'][div.ticker_symbol] = {
-                    'total': 0,
-                    'currency': currency,
-                    'count': 0
-                }
-            results['by_ticker'][div.ticker_symbol]['total'] += float(div.total_dividend or 0)
-            results['by_ticker'][div.ticker_symbol]['count'] += 1
+            if div.ticker_symbol not in results["by_ticker"]:
+                results["by_ticker"][div.ticker_symbol] = {"total": 0, "currency": currency, "count": 0}
+            results["by_ticker"][div.ticker_symbol]["total"] += float(div.total_dividend or 0)
+            results["by_ticker"][div.ticker_symbol]["count"] += 1
 
         return results
 

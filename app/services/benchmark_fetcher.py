@@ -1,4 +1,5 @@
 """ベンチマーク指数取得サービス"""
+
 import ssl
 import os
 from datetime import datetime, date, timedelta
@@ -13,8 +14,8 @@ from app.utils.logger import get_logger, log_external_api_call
 
 # SSL証明書検証の無効化（日本語ユーザー名パス問題対策）
 ssl._create_default_https_context = ssl._create_unverified_context
-os.environ['PYTHONHTTPSVERIFY'] = '0'
-os.environ['CURL_CA_BUNDLE'] = ''
+os.environ["PYTHONHTTPSVERIFY"] = "0"
+os.environ["CURL_CA_BUNDLE"] = ""
 
 logger = get_logger(__name__)
 
@@ -23,24 +24,14 @@ class BenchmarkFetcher:
     """ベンチマーク指数取得サービス"""
 
     BENCHMARKS = {
-        'TOPIX': {
-            'ticker': '^N225',  # TOPIXが利用不可のため日経平均を使用
-            'name': '日経平均225',
-            'currency': 'JPY',
-            'country': 'Japan'
+        "TOPIX": {
+            "ticker": "^N225",  # TOPIXが利用不可のため日経平均を使用
+            "name": "日経平均225",
+            "currency": "JPY",
+            "country": "Japan",
         },
-        'SP500': {
-            'ticker': '^GSPC',
-            'name': 'S&P 500',
-            'currency': 'USD',
-            'country': 'USA'
-        },
-        'N225': {
-            'ticker': '^N225',
-            'name': '日経平均225',
-            'currency': 'JPY',
-            'country': 'Japan'
-        }
+        "SP500": {"ticker": "^GSPC", "name": "S&P 500", "currency": "USD", "country": "USA"},
+        "N225": {"ticker": "^N225", "name": "日経平均225", "currency": "JPY", "country": "Japan"},
     }
 
     @staticmethod
@@ -61,26 +52,23 @@ class BenchmarkFetcher:
             logger.error(f"Unknown benchmark key: {benchmark_key}")
             return None
 
-        ticker_symbol = benchmark['ticker']
+        ticker_symbol = benchmark["ticker"]
 
         # キャッシュチェック
         if use_cache:
             today = datetime.now().date()
-            cached = BenchmarkPrice.query.filter_by(
-                benchmark_key=benchmark_key,
-                price_date=today
-            ).first()
+            cached = BenchmarkPrice.query.filter_by(benchmark_key=benchmark_key, price_date=today).first()
 
             if cached:
                 logger.info(f"Benchmark price loaded from cache: {benchmark_key}")
                 return {
-                    'benchmark_key': benchmark_key,
-                    'ticker': ticker_symbol,
-                    'name': benchmark['name'],
-                    'price': float(cached.close_price),
-                    'currency': cached.currency,
-                    'previous_close': float(cached.previous_close) if cached.previous_close else None,
-                    'timestamp': cached.created_at
+                    "benchmark_key": benchmark_key,
+                    "ticker": ticker_symbol,
+                    "name": benchmark["name"],
+                    "price": float(cached.close_price),
+                    "currency": cached.currency,
+                    "previous_close": float(cached.previous_close) if cached.previous_close else None,
+                    "timestamp": cached.created_at,
                 }
 
         # yfinanceで取得
@@ -94,53 +82,52 @@ class BenchmarkFetcher:
 
             try:
                 info = ticker.info
-                price = info.get('currentPrice') or info.get('regularMarketPrice')
-                previous_close = info.get('previousClose')
+                price = info.get("currentPrice") or info.get("regularMarketPrice")
+                previous_close = info.get("previousClose")
             except Exception as info_error:
                 logger.warning(f"Info fetch failed for {ticker_symbol}, fallback to history: {info_error}")
 
             # history フォールバック
             if price is None:
-                hist = ticker.history(period='5d')
+                hist = ticker.history(period="5d")
                 if hist.empty:
-                    log_external_api_call(logger, 'yfinance', f'get_benchmark/{ticker_symbol}',
-                                        success=False, error='履歴データが空')
+                    log_external_api_call(
+                        logger, "yfinance", f"get_benchmark/{ticker_symbol}", success=False, error="履歴データが空"
+                    )
                     return None
 
-                price = float(hist['Close'].iloc[-1])
+                price = float(hist["Close"].iloc[-1])
                 if len(hist) >= 2:
-                    previous_close = float(hist['Close'].iloc[-2])
+                    previous_close = float(hist["Close"].iloc[-2])
 
             if price is None:
-                log_external_api_call(logger, 'yfinance', f'get_benchmark/{ticker_symbol}',
-                                    success=False, error='価格データが取得できませんでした')
+                log_external_api_call(
+                    logger,
+                    "yfinance",
+                    f"get_benchmark/{ticker_symbol}",
+                    success=False,
+                    error="価格データが取得できませんでした",
+                )
                 return None
 
-            log_external_api_call(logger, 'yfinance', f'get_benchmark/{ticker_symbol}',
-                                success=True)
+            log_external_api_call(logger, "yfinance", f"get_benchmark/{ticker_symbol}", success=True)
 
             # キャッシュに保存
-            BenchmarkFetcher._cache_benchmark(
-                benchmark_key,
-                price,
-                benchmark['currency'],
-                previous_close
-            )
+            BenchmarkFetcher._cache_benchmark(benchmark_key, price, benchmark["currency"], previous_close)
 
             return {
-                'benchmark_key': benchmark_key,
-                'ticker': ticker_symbol,
-                'name': benchmark['name'],
-                'price': float(price),
-                'currency': benchmark['currency'],
-                'previous_close': float(previous_close) if previous_close else None,
-                'timestamp': datetime.now()
+                "benchmark_key": benchmark_key,
+                "ticker": ticker_symbol,
+                "name": benchmark["name"],
+                "price": float(price),
+                "currency": benchmark["currency"],
+                "previous_close": float(previous_close) if previous_close else None,
+                "timestamp": datetime.now(),
             }
 
         except Exception as e:
             logger.error(f"Error fetching benchmark price ({benchmark_key}): {str(e)}")
-            log_external_api_call(logger, 'yfinance', f'get_benchmark/{ticker_symbol}',
-                                success=False, error=str(e))
+            log_external_api_call(logger, "yfinance", f"get_benchmark/{ticker_symbol}", success=False, error=str(e))
             return None
 
     @staticmethod
@@ -161,14 +148,18 @@ class BenchmarkFetcher:
             logger.error(f"Unknown benchmark key: {benchmark_key}")
             return []
 
-        ticker_symbol = benchmark['ticker']
+        ticker_symbol = benchmark["ticker"]
 
         # キャッシュから取得を試みる
-        cached_data = BenchmarkPrice.query.filter(
-            BenchmarkPrice.benchmark_key == benchmark_key,
-            BenchmarkPrice.price_date >= start_date,
-            BenchmarkPrice.price_date <= end_date
-        ).order_by(BenchmarkPrice.price_date).all()
+        cached_data = (
+            BenchmarkPrice.query.filter(
+                BenchmarkPrice.benchmark_key == benchmark_key,
+                BenchmarkPrice.price_date >= start_date,
+                BenchmarkPrice.price_date <= end_date,
+            )
+            .order_by(BenchmarkPrice.price_date)
+            .all()
+        )
 
         # キャッシュが十分にあるかチェック（期待日数の80%以上）
         expected_days = (end_date - start_date).days + 1
@@ -176,30 +167,45 @@ class BenchmarkFetcher:
             logger.info(f"Benchmark historical data loaded from cache: {benchmark_key} ({len(cached_data)} days)")
             result = []
             for i, item in enumerate(cached_data):
-                result.append({
-                    'date': item.price_date,
-                    'close': float(item.close_price),
-                    'previous_close': float(item.previous_close) if item.previous_close else (
-                        float(cached_data[i-1].close_price) if i > 0 else None
-                    )
-                })
+                result.append(
+                    {
+                        "date": item.price_date,
+                        "close": float(item.close_price),
+                        "previous_close": (
+                            float(item.previous_close)
+                            if item.previous_close
+                            else (float(cached_data[i - 1].close_price) if i > 0 else None)
+                        ),
+                    }
+                )
             return result
 
         # yfinanceで取得
         try:
-            logger.info(f"Fetching benchmark historical data from yfinance: {ticker_symbol} ({start_date} to {end_date})")
+            logger.info(
+                f"Fetching benchmark historical data from yfinance: {ticker_symbol} ({start_date} to {end_date})"
+            )
             ticker = yf.Ticker(ticker_symbol)
             hist = ticker.history(start=start_date, end=end_date + timedelta(days=1))
 
             if hist.empty:
-                log_external_api_call(logger, 'yfinance', f'get_benchmark_history/{ticker_symbol}',
-                                    params={'start': str(start_date), 'end': str(end_date)},
-                                    success=False, error='履歴データが空')
+                log_external_api_call(
+                    logger,
+                    "yfinance",
+                    f"get_benchmark_history/{ticker_symbol}",
+                    params={"start": str(start_date), "end": str(end_date)},
+                    success=False,
+                    error="履歴データが空",
+                )
                 return []
 
-            log_external_api_call(logger, 'yfinance', f'get_benchmark_history/{ticker_symbol}',
-                                params={'start': str(start_date), 'end': str(end_date)},
-                                success=True)
+            log_external_api_call(
+                logger,
+                "yfinance",
+                f"get_benchmark_history/{ticker_symbol}",
+                params={"start": str(start_date), "end": str(end_date)},
+                success=True,
+            )
 
             # データを処理してキャッシュ保存
             result = []
@@ -207,22 +213,14 @@ class BenchmarkFetcher:
 
             for idx, (date_timestamp, row) in enumerate(hist.iterrows()):
                 price_date = date_timestamp.date()
-                close_price = float(row['Close'])
+                close_price = float(row["Close"])
 
                 # キャッシュに保存
                 BenchmarkFetcher._cache_benchmark(
-                    benchmark_key,
-                    close_price,
-                    benchmark['currency'],
-                    previous_close_value,
-                    price_date
+                    benchmark_key, close_price, benchmark["currency"], previous_close_value, price_date
                 )
 
-                result.append({
-                    'date': price_date,
-                    'close': close_price,
-                    'previous_close': previous_close_value
-                })
+                result.append({"date": price_date, "close": close_price, "previous_close": previous_close_value})
 
                 previous_close_value = close_price
 
@@ -231,9 +229,14 @@ class BenchmarkFetcher:
 
         except Exception as e:
             logger.error(f"Error fetching benchmark historical data ({benchmark_key}): {str(e)}")
-            log_external_api_call(logger, 'yfinance', f'get_benchmark_history/{ticker_symbol}',
-                                params={'start': str(start_date), 'end': str(end_date)},
-                                success=False, error=str(e))
+            log_external_api_call(
+                logger,
+                "yfinance",
+                f"get_benchmark_history/{ticker_symbol}",
+                params={"start": str(start_date), "end": str(end_date)},
+                success=False,
+                error=str(e),
+            )
             return []
 
     @staticmethod
@@ -276,10 +279,7 @@ class BenchmarkFetcher:
             price_date = datetime.now().date()
 
         try:
-            existing = BenchmarkPrice.query.filter_by(
-                benchmark_key=benchmark_key,
-                price_date=price_date
-            ).first()
+            existing = BenchmarkPrice.query.filter_by(benchmark_key=benchmark_key, price_date=price_date).first()
 
             if existing:
                 # 既存レコードを更新
@@ -293,7 +293,7 @@ class BenchmarkFetcher:
                     price_date=price_date,
                     close_price=Decimal(str(price)),
                     currency=currency,
-                    previous_close=Decimal(str(previous_close)) if previous_close is not None else None
+                    previous_close=Decimal(str(previous_close)) if previous_close is not None else None,
                 )
                 db.session.add(bp)
 

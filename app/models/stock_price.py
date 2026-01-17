@@ -5,7 +5,7 @@ from app import db
 class StockPrice(db.Model):
     """株価キャッシュモデル"""
 
-    __tablename__ = 'stock_prices'
+    __tablename__ = "stock_prices"
 
     id = db.Column(db.Integer, primary_key=True)
     ticker_symbol = db.Column(db.String(20), nullable=False, index=True)
@@ -15,20 +15,18 @@ class StockPrice(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # 複合ユニーク制約
-    __table_args__ = (
-        db.UniqueConstraint('ticker_symbol', 'price_date', name='uix_ticker_date'),
-    )
+    __table_args__ = (db.UniqueConstraint("ticker_symbol", "price_date", name="uix_ticker_date"),)
 
     def __repr__(self):
-        return f'<StockPrice {self.ticker_symbol} {self.price_date} {self.close_price}>'
+        return f"<StockPrice {self.ticker_symbol} {self.price_date} {self.close_price}>"
 
     def to_dict(self):
         """辞書形式に変換"""
         return {
-            'id': self.id,
-            'ticker_symbol': self.ticker_symbol,
-            'price_date': self.price_date.isoformat() if self.price_date else None,
-            'close_price': float(self.close_price) if self.close_price else 0,
-            'currency': self.currency,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            "id": self.id,
+            "ticker_symbol": self.ticker_symbol,
+            "price_date": self.price_date.isoformat() if self.price_date else None,
+            "close_price": float(self.close_price) if self.close_price else 0,
+            "currency": self.currency,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }

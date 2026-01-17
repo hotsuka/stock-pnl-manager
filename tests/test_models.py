@@ -1,6 +1,7 @@
 """
 データモデルのユニットテスト
 """
+
 import pytest
 from datetime import date
 from app.models import Transaction, Holding, RealizedPnl, Dividend
@@ -13,29 +14,29 @@ class TestTransaction:
         """取引データの作成テスト"""
         transaction = Transaction(
             transaction_date=date(2024, 1, 10),
-            ticker_symbol='7203',
-            security_name='トヨタ自動車',
-            transaction_type='買付',
+            ticker_symbol="7203",
+            security_name="トヨタ自動車",
+            transaction_type="買付",
             quantity=100,
             unit_price=2500.0,
-            currency='JPY',
+            currency="JPY",
             commission=100.0,
-            settlement_amount=250100.0
+            settlement_amount=250100.0,
         )
 
         db_session.add(transaction)
         db_session.commit()
 
         # データベースから取得
-        saved = Transaction.query.filter_by(ticker_symbol='7203').first()
+        saved = Transaction.query.filter_by(ticker_symbol="7203").first()
 
         assert saved is not None
-        assert saved.ticker_symbol == '7203'
-        assert saved.security_name == 'トヨタ自動車'
-        assert saved.transaction_type == '買付'
+        assert saved.ticker_symbol == "7203"
+        assert saved.security_name == "トヨタ自動車"
+        assert saved.transaction_type == "買付"
         assert saved.quantity == 100
         assert saved.unit_price == 2500.0
-        assert saved.currency == 'JPY'
+        assert saved.currency == "JPY"
         assert saved.commission == 100.0
         assert saved.settlement_amount == 250100.0
 
@@ -46,17 +47,17 @@ class TestTransaction:
         assert len(all_transactions) == 3
 
         # 特定銘柄の取引
-        aapl_transactions = Transaction.query.filter_by(ticker_symbol='AAPL').all()
+        aapl_transactions = Transaction.query.filter_by(ticker_symbol="AAPL").all()
         assert len(aapl_transactions) == 1
-        assert aapl_transactions[0].security_name == 'Apple Inc.'
+        assert aapl_transactions[0].security_name == "Apple Inc."
 
         # 買付取引のみ
-        buy_transactions = Transaction.query.filter_by(transaction_type='買付').all()
+        buy_transactions = Transaction.query.filter_by(transaction_type="買付").all()
         assert len(buy_transactions) == 2
 
     def test_transaction_update(self, db_session, sample_transactions):
         """取引データの更新テスト"""
-        transaction = Transaction.query.filter_by(ticker_symbol='1475').first()
+        transaction = Transaction.query.filter_by(ticker_symbol="1475").first()
         original_quantity = transaction.quantity
 
         # 数量を更新
@@ -70,7 +71,7 @@ class TestTransaction:
 
     def test_transaction_delete(self, db_session, sample_transactions):
         """取引データの削除テスト"""
-        transaction = Transaction.query.filter_by(ticker_symbol='AAPL').first()
+        transaction = Transaction.query.filter_by(ticker_symbol="AAPL").first()
         transaction_id = transaction.id
 
         db_session.delete(transaction)
@@ -87,25 +88,25 @@ class TestHolding:
     def test_create_holding(self, db_session):
         """保有銘柄データの作成テスト"""
         holding = Holding(
-            ticker_symbol='9984',
-            security_name='ソフトバンクグループ',
+            ticker_symbol="9984",
+            security_name="ソフトバンクグループ",
             total_quantity=100,
             average_cost=5000.0,
             total_cost=500000.0,
-            currency='JPY',
+            currency="JPY",
             current_price=5500.0,
             current_value=550000.0,
             unrealized_pnl=50000.0,
-            unrealized_pnl_pct=10.0
+            unrealized_pnl_pct=10.0,
         )
 
         db_session.add(holding)
         db_session.commit()
 
-        saved = Holding.query.filter_by(ticker_symbol='9984').first()
+        saved = Holding.query.filter_by(ticker_symbol="9984").first()
 
         assert saved is not None
-        assert saved.ticker_symbol == '9984'
+        assert saved.ticker_symbol == "9984"
         assert saved.total_quantity == 100
         assert saved.average_cost == 5000.0
         assert saved.unrealized_pnl == 50000.0
@@ -122,7 +123,7 @@ class TestHolding:
 
     def test_holding_calculation(self, db_session, sample_holdings):
         """保有銘柄の計算値検証"""
-        holding = Holding.query.filter_by(ticker_symbol='AAPL').first()
+        holding = Holding.query.filter_by(ticker_symbol="AAPL").first()
 
         # current_value と current_price は異なる通貨単位の可能性がある
         # (current_priceはUSD、current_valueはJPY換算済み)
@@ -141,20 +142,20 @@ class TestRealizedPnl:
     def test_create_realized_pnl(self, db_session):
         """実現損益データの作成テスト"""
         realized = RealizedPnl(
-            ticker_symbol='8306',
+            ticker_symbol="8306",
             sell_date=date(2024, 3, 20),
             quantity=500,
             average_cost=1000.0,
             sell_price=1200.0,
             realized_pnl=100000.0,
             realized_pnl_pct=20.0,
-            currency='JPY'
+            currency="JPY",
         )
 
         db_session.add(realized)
         db_session.commit()
 
-        saved = RealizedPnl.query.filter_by(ticker_symbol='8306').first()
+        saved = RealizedPnl.query.filter_by(ticker_symbol="8306").first()
 
         assert saved is not None
         assert saved.realized_pnl == 100000.0
@@ -176,20 +177,20 @@ class TestDividend:
     def test_create_dividend(self, db_session):
         """配当データの作成テスト"""
         dividend = Dividend(
-            ticker_symbol='MSFT',
+            ticker_symbol="MSFT",
             ex_dividend_date=date(2024, 6, 15),
             payment_date=date(2024, 6, 30),
             dividend_amount=0.75,
             quantity_held=20,
             total_dividend=2250.0,  # 0.75 * 20 * 150 (JPY換算済み)
-            currency='USD',
-            source='manual'
+            currency="USD",
+            source="manual",
         )
 
         db_session.add(dividend)
         db_session.commit()
 
-        saved = Dividend.query.filter_by(ticker_symbol='MSFT').first()
+        saved = Dividend.query.filter_by(ticker_symbol="MSFT").first()
 
         assert saved is not None
         assert saved.quantity_held == 20
@@ -202,12 +203,12 @@ class TestDividend:
         assert len(all_dividends) == 1
 
         # 特定銘柄の配当
-        aapl_dividends = Dividend.query.filter_by(ticker_symbol='AAPL').all()
+        aapl_dividends = Dividend.query.filter_by(ticker_symbol="AAPL").all()
         assert len(aapl_dividends) == 1
 
     def test_dividend_calculation(self, db_session, sample_dividends):
         """配当金計算の検証"""
-        dividend = Dividend.query.filter_by(ticker_symbol='AAPL').first()
+        dividend = Dividend.query.filter_by(ticker_symbol="AAPL").first()
 
         # 配当金総額が正しく記録されているか確認
         # total_dividend = 1株配当 × 数量 × 為替レート（事前計算済み）

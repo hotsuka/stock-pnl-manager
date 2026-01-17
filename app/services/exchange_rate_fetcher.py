@@ -11,10 +11,11 @@ from datetime import datetime, timedelta
 
 # Disable SSL verification to work around Japanese username path issue
 import os
-os.environ['PYTHONHTTPSVERIFY'] = '0'
-os.environ['CURL_CA_BUNDLE'] = ''
-os.environ['REQUESTS_CA_BUNDLE'] = ''
-os.environ['SSL_CERT_FILE'] = ''
+
+os.environ["PYTHONHTTPSVERIFY"] = "0"
+os.environ["CURL_CA_BUNDLE"] = ""
+os.environ["REQUESTS_CA_BUNDLE"] = ""
+os.environ["SSL_CERT_FILE"] = ""
 ssl._create_default_https_context = ssl._create_unverified_context
 
 
@@ -23,20 +24,20 @@ class ExchangeRateFetcher:
 
     # Common currency pairs to JPY
     CURRENCY_PAIRS = {
-        'USD': 'USDJPY=X',
-        'EUR': 'EURJPY=X',
-        'GBP': 'GBPJPY=X',
-        'CNY': 'CNYJPY=X',
-        'KRW': 'KRWJPY=X',
-        'TWD': 'TWDJPY=X',
-        'HKD': 'HKDJPY=X',
-        'AUD': 'AUDJPY=X',
-        'CAD': 'CADJPY=X',
-        'CHF': 'CHFJPY=X'
+        "USD": "USDJPY=X",
+        "EUR": "EURJPY=X",
+        "GBP": "GBPJPY=X",
+        "CNY": "CNYJPY=X",
+        "KRW": "KRWJPY=X",
+        "TWD": "TWDJPY=X",
+        "HKD": "HKDJPY=X",
+        "AUD": "AUDJPY=X",
+        "CAD": "CADJPY=X",
+        "CHF": "CHFJPY=X",
     }
 
     @staticmethod
-    def get_exchange_rate(from_currency, to_currency='JPY'):
+    def get_exchange_rate(from_currency, to_currency="JPY"):
         """
         Get current exchange rate
 
@@ -50,27 +51,22 @@ class ExchangeRateFetcher:
         """
         # Same currency
         if from_currency == to_currency:
-            return {
-                'rate': 1.0,
-                'from': from_currency,
-                'to': to_currency,
-                'timestamp': datetime.now()
-            }
+            return {"rate": 1.0, "from": from_currency, "to": to_currency, "timestamp": datetime.now()}
 
         # JPY to other currency (inverse)
-        if from_currency == 'JPY' and to_currency in ExchangeRateFetcher.CURRENCY_PAIRS:
-            rate_data = ExchangeRateFetcher.get_exchange_rate(to_currency, 'JPY')
+        if from_currency == "JPY" and to_currency in ExchangeRateFetcher.CURRENCY_PAIRS:
+            rate_data = ExchangeRateFetcher.get_exchange_rate(to_currency, "JPY")
             if rate_data:
                 return {
-                    'rate': 1.0 / rate_data['rate'],
-                    'from': from_currency,
-                    'to': to_currency,
-                    'timestamp': rate_data['timestamp']
+                    "rate": 1.0 / rate_data["rate"],
+                    "from": from_currency,
+                    "to": to_currency,
+                    "timestamp": rate_data["timestamp"],
                 }
             return None
 
         # Get pair symbol
-        if to_currency == 'JPY':
+        if to_currency == "JPY":
             pair_symbol = ExchangeRateFetcher.CURRENCY_PAIRS.get(from_currency)
         else:
             # For non-JPY pairs, construct the symbol
@@ -85,23 +81,23 @@ class ExchangeRateFetcher:
 
             # Try to get current price
             try:
-                rate = ticker.info.get('regularMarketPrice') or ticker.info.get('ask')
+                rate = ticker.info.get("regularMarketPrice") or ticker.info.get("ask")
             except:
                 # Fallback to history
-                hist = ticker.history(period='1d')
+                hist = ticker.history(period="1d")
                 if hist.empty:
                     return None
-                rate = float(hist['Close'].iloc[-1])
+                rate = float(hist["Close"].iloc[-1])
 
             if rate is None:
                 return None
 
             return {
-                'rate': float(rate),
-                'from': from_currency,
-                'to': to_currency,
-                'timestamp': datetime.now(),
-                'pair': pair_symbol
+                "rate": float(rate),
+                "from": from_currency,
+                "to": to_currency,
+                "timestamp": datetime.now(),
+                "pair": pair_symbol,
             }
 
         except Exception as e:
@@ -109,7 +105,7 @@ class ExchangeRateFetcher:
             return None
 
     @staticmethod
-    def get_multiple_rates(currency_list, to_currency='JPY'):
+    def get_multiple_rates(currency_list, to_currency="JPY"):
         """
         Get exchange rates for multiple currencies
 
@@ -128,7 +124,7 @@ class ExchangeRateFetcher:
         return results
 
     @staticmethod
-    def convert_amount(amount, from_currency, to_currency='JPY'):
+    def convert_amount(amount, from_currency, to_currency="JPY"):
         """
         Convert an amount from one currency to another
 
@@ -142,27 +138,22 @@ class ExchangeRateFetcher:
             None: If conversion fails
         """
         if amount is None or amount == 0:
-            return {
-                'amount': 0,
-                'rate': 0,
-                'from': from_currency,
-                'to': to_currency
-            }
+            return {"amount": 0, "rate": 0, "from": from_currency, "to": to_currency}
 
         rate_data = ExchangeRateFetcher.get_exchange_rate(from_currency, to_currency)
 
         if not rate_data:
             return None
 
-        converted_amount = float(amount) * rate_data['rate']
+        converted_amount = float(amount) * rate_data["rate"]
 
         return {
-            'amount': converted_amount,
-            'original_amount': float(amount),
-            'rate': rate_data['rate'],
-            'from': from_currency,
-            'to': to_currency,
-            'timestamp': rate_data['timestamp']
+            "amount": converted_amount,
+            "original_amount": float(amount),
+            "rate": rate_data["rate"],
+            "from": from_currency,
+            "to": to_currency,
+            "timestamp": rate_data["timestamp"],
         }
 
     @staticmethod
@@ -181,15 +172,10 @@ class ExchangeRateFetcher:
         """
         # Same currency
         if from_currency == to_currency:
-            return {
-                'rate': 1.0,
-                'from': from_currency,
-                'to': to_currency,
-                'date': date
-            }
+            return {"rate": 1.0, "from": from_currency, "to": to_currency, "date": date}
 
         # Get pair symbol
-        if to_currency == 'JPY':
+        if to_currency == "JPY":
             pair_symbol = ExchangeRateFetcher.CURRENCY_PAIRS.get(from_currency)
         else:
             pair_symbol = f"{from_currency}{to_currency}=X"
@@ -204,7 +190,7 @@ class ExchangeRateFetcher:
             # Get history for the date
             # Add a buffer to ensure we get the date
             if isinstance(date, str):
-                date = datetime.strptime(date, '%Y-%m-%d').date()
+                date = datetime.strptime(date, "%Y-%m-%d").date()
 
             start_date = date
             end_date = date + timedelta(days=5)  # Buffer for weekends/holidays
@@ -215,14 +201,14 @@ class ExchangeRateFetcher:
                 return None
 
             # Get the first available rate on or after the date
-            rate = float(hist['Close'].iloc[0])
+            rate = float(hist["Close"].iloc[0])
 
             return {
-                'rate': rate,
-                'from': from_currency,
-                'to': to_currency,
-                'date': hist.index[0].date(),
-                'pair': pair_symbol
+                "rate": rate,
+                "from": from_currency,
+                "to": to_currency,
+                "date": hist.index[0].date(),
+                "pair": pair_symbol,
             }
 
         except Exception as e:

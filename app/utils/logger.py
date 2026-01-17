@@ -1,6 +1,7 @@
 """
 ロギング設定
 """
+
 import logging
 import os
 from pathlib import Path
@@ -15,20 +16,17 @@ def setup_logger(app):
         app: Flask application instance
     """
     # ログディレクトリの作成
-    log_dir = Path(__file__).parent.parent.parent / 'logs'
+    log_dir = Path(__file__).parent.parent.parent / "logs"
     log_dir.mkdir(exist_ok=True)
 
     # ログファイル名（日付付き）
     log_file = log_dir / f"app_{datetime.now().strftime('%Y%m%d')}.log"
 
     # ログフォーマット
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
     # ファイルハンドラー
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(formatter)
 
@@ -68,7 +66,7 @@ def get_logger(name):
 
     if not logger.handlers:
         # ログディレクトリの作成
-        log_dir = Path(__file__).parent.parent.parent / 'logs'
+        log_dir = Path(__file__).parent.parent.parent / "logs"
         log_dir.mkdir(exist_ok=True)
 
         # ログファイル名
@@ -76,12 +74,11 @@ def get_logger(name):
 
         # フォーマッター
         formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
 
         # ファイルハンドラー
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(formatter)
 

@@ -30,6 +30,12 @@ class Config:
     APP_NAME = 'Stock P&L Manager'
     ITEMS_PER_PAGE = 50
 
+    # Backup configuration
+    BACKUP_DIR = BASE_DIR / 'backups'
+    AUTO_BACKUP_ENABLED = True
+    BACKUP_RETENTION_DAYS = 7  # バックアップ保持日数
+    BACKUP_INTERVAL_HOURS = 24  # バックアップ間隔（時間）
+
 
 class DevelopmentConfig(Config):
     """Development configuration"""
@@ -53,6 +59,7 @@ class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     WTF_CSRF_ENABLED = False
+    AUTO_BACKUP_ENABLED = False  # テスト環境では自動バックアップ無効
 
 
 # Configuration dictionary

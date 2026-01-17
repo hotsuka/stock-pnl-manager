@@ -2,6 +2,7 @@
 
 Yahoo Financeから取得した財務指標を保存するモデル
 """
+
 from datetime import datetime
 from app import db
 
@@ -16,7 +17,8 @@ class StockMetrics(db.Model):
     - 株価レンジ (52週高値・安値)
     - リターン指標 (YTD、1年)
     """
-    __tablename__ = 'stock_metrics'
+
+    __tablename__ = "stock_metrics"
 
     id = db.Column(db.Integer, primary_key=True)
     ticker_symbol = db.Column(db.String(20), nullable=False, unique=True, index=True)
@@ -56,23 +58,23 @@ class StockMetrics(db.Model):
             dict: 評価指標データの辞書
         """
         return {
-            'ticker_symbol': self.ticker_symbol,
-            'market_cap': float(self.market_cap) if self.market_cap else None,
-            'beta': float(self.beta) if self.beta else None,
-            'pe_ratio': float(self.pe_ratio) if self.pe_ratio else None,
-            'eps': float(self.eps) if self.eps else None,
-            'pb_ratio': float(self.pb_ratio) if self.pb_ratio else None,
-            'ev_to_revenue': float(self.ev_to_revenue) if self.ev_to_revenue else None,
-            'ev_to_ebitda': float(self.ev_to_ebitda) if self.ev_to_ebitda else None,
-            'revenue': float(self.revenue) if self.revenue else None,
-            'profit_margin': float(self.profit_margin) if self.profit_margin else None,
-            'fifty_two_week_low': float(self.fifty_two_week_low) if self.fifty_two_week_low else None,
-            'fifty_two_week_high': float(self.fifty_two_week_high) if self.fifty_two_week_high else None,
-            'ytd_return': float(self.ytd_return) if self.ytd_return else None,
-            'one_year_return': float(self.one_year_return) if self.one_year_return else None,
-            'currency': self.currency,
-            'last_updated': self.last_updated.isoformat() if self.last_updated else None
+            "ticker_symbol": self.ticker_symbol,
+            "market_cap": float(self.market_cap) if self.market_cap else None,
+            "beta": float(self.beta) if self.beta else None,
+            "pe_ratio": float(self.pe_ratio) if self.pe_ratio else None,
+            "eps": float(self.eps) if self.eps else None,
+            "pb_ratio": float(self.pb_ratio) if self.pb_ratio else None,
+            "ev_to_revenue": float(self.ev_to_revenue) if self.ev_to_revenue else None,
+            "ev_to_ebitda": float(self.ev_to_ebitda) if self.ev_to_ebitda else None,
+            "revenue": float(self.revenue) if self.revenue else None,
+            "profit_margin": float(self.profit_margin) if self.profit_margin else None,
+            "fifty_two_week_low": float(self.fifty_two_week_low) if self.fifty_two_week_low else None,
+            "fifty_two_week_high": float(self.fifty_two_week_high) if self.fifty_two_week_high else None,
+            "ytd_return": float(self.ytd_return) if self.ytd_return else None,
+            "one_year_return": float(self.one_year_return) if self.one_year_return else None,
+            "currency": self.currency,
+            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
         }
 
     def __repr__(self):
-        return f'<StockMetrics {self.ticker_symbol}>'
+        return f"<StockMetrics {self.ticker_symbol}>"

@@ -1,6 +1,7 @@
 """
 サービス層のユニットテスト
 """
+
 import pytest
 from datetime import date
 from decimal import Decimal
@@ -15,24 +16,24 @@ class TestTransactionService:
         """単一取引の平均取得単価計算テスト"""
         transaction = Transaction(
             transaction_date=date(2024, 1, 10),
-            ticker_symbol='7203',
-            security_name='トヨタ自動車',
-            transaction_type='買付',
+            ticker_symbol="7203",
+            security_name="トヨタ自動車",
+            transaction_type="BUY",
             quantity=100,
             unit_price=2500.0,
-            currency='JPY',
+            currency="JPY",
             commission=100.0,
-            settlement_amount=250100.0
+            settlement_amount=250100.0,
         )
 
         db_session.add(transaction)
         db_session.commit()
 
         # 保有銘柄の再計算
-        TransactionService.recalculate_holding('7203')
+        TransactionService.recalculate_holding("7203")
 
         # 検証
-        holding = Holding.query.filter_by(ticker_symbol='7203').first()
+        holding = Holding.query.filter_by(ticker_symbol="7203").first()
         assert holding is not None
         assert holding.total_quantity == 100
         assert holding.total_cost == 250100.0
@@ -43,35 +44,35 @@ class TestTransactionService:
         transactions = [
             Transaction(
                 transaction_date=date(2024, 1, 10),
-                ticker_symbol='1475',
-                security_name='iシェアーズ TOPIXコアETF',
-                transaction_type='買付',
+                ticker_symbol="1475",
+                security_name="iシェアーズ TOPIXコアETF",
+                transaction_type="BUY",
                 quantity=100,
                 unit_price=2000.0,
-                currency='JPY',
+                currency="JPY",
                 commission=100.0,
-                settlement_amount=200100.0
+                settlement_amount=200100.0,
             ),
             Transaction(
                 transaction_date=date(2024, 2, 15),
-                ticker_symbol='1475',
-                security_name='iシェアーズ TOPIXコアETF',
-                transaction_type='買付',
+                ticker_symbol="1475",
+                security_name="iシェアーズ TOPIXコアETF",
+                transaction_type="BUY",
                 quantity=50,
                 unit_price=2200.0,
-                currency='JPY',
+                currency="JPY",
                 commission=50.0,
-                settlement_amount=110050.0
-            )
+                settlement_amount=110050.0,
+            ),
         ]
 
         for t in transactions:
             db_session.add(t)
         db_session.commit()
 
-        TransactionService.recalculate_holding('1475')
+        TransactionService.recalculate_holding("1475")
 
-        holding = Holding.query.filter_by(ticker_symbol='1475').first()
+        holding = Holding.query.filter_by(ticker_symbol="1475").first()
         assert holding is not None
         assert holding.total_quantity == 150
         # 総コスト = 200,100 + 110,050 = 310,150
@@ -84,43 +85,43 @@ class TestTransactionService:
         # 買付
         buy = Transaction(
             transaction_date=date(2024, 1, 10),
-            ticker_symbol='AAPL',
-            security_name='Apple Inc.',
-            transaction_type='買付',
+            ticker_symbol="AAPL",
+            security_name="Apple Inc.",
+            transaction_type="BUY",
             quantity=100,
             unit_price=150.0,
-            currency='USD',
+            currency="USD",
             commission=10.0,
-            settlement_amount=2251510.0
+            settlement_amount=2251510.0,
         )
         db_session.add(buy)
         db_session.commit()
 
-        TransactionService.recalculate_holding('AAPL')
+        TransactionService.recalculate_holding("AAPL")
 
         # 売却前の保有数
-        holding_before = Holding.query.filter_by(ticker_symbol='AAPL').first()
+        holding_before = Holding.query.filter_by(ticker_symbol="AAPL").first()
         assert holding_before.total_quantity == 100
 
         # 売却
         sell = Transaction(
             transaction_date=date(2024, 2, 15),
-            ticker_symbol='AAPL',
-            security_name='Apple Inc.',
-            transaction_type='売付',
+            ticker_symbol="AAPL",
+            security_name="Apple Inc.",
+            transaction_type="SELL",
             quantity=30,
             unit_price=160.0,
-            currency='USD',
+            currency="USD",
             commission=5.0,
-            settlement_amount=720000.0
+            settlement_amount=720000.0,
         )
         db_session.add(sell)
         db_session.commit()
 
-        TransactionService.recalculate_holding('AAPL')
+        TransactionService.recalculate_holding("AAPL")
 
         # 売却後の保有数
-        holding_after = Holding.query.filter_by(ticker_symbol='AAPL').first()
+        holding_after = Holding.query.filter_by(ticker_symbol="AAPL").first()
         assert holding_after.total_quantity == 70
 
     def test_sell_all_creates_realized_pnl(self, db_session):
@@ -128,43 +129,43 @@ class TestTransactionService:
         # 買付
         buy = Transaction(
             transaction_date=date(2024, 1, 10),
-            ticker_symbol='9984',
-            security_name='ソフトバンクグループ',
-            transaction_type='買付',
+            ticker_symbol="9984",
+            security_name="ソフトバンクグループ",
+            transaction_type="BUY",
             quantity=100,
             unit_price=5000.0,
-            currency='JPY',
+            currency="JPY",
             commission=500.0,
-            settlement_amount=500500.0
+            settlement_amount=500500.0,
         )
         db_session.add(buy)
         db_session.commit()
 
-        TransactionService.recalculate_holding('9984')
+        TransactionService.recalculate_holding("9984")
 
         # 全売却
         sell = Transaction(
             transaction_date=date(2024, 3, 20),
-            ticker_symbol='9984',
-            security_name='ソフトバンクグループ',
-            transaction_type='売付',
+            ticker_symbol="9984",
+            security_name="ソフトバンクグループ",
+            transaction_type="SELL",
             quantity=100,
             unit_price=5500.0,
-            currency='JPY',
+            currency="JPY",
             commission=300.0,
-            settlement_amount=549700.0
+            settlement_amount=549700.0,
         )
         db_session.add(sell)
         db_session.commit()
 
-        TransactionService.recalculate_holding('9984')
+        TransactionService.recalculate_holding("9984")
 
         # 保有銘柄が削除されていることを確認
-        holding = Holding.query.filter_by(ticker_symbol='9984').first()
+        holding = Holding.query.filter_by(ticker_symbol="9984").first()
         assert holding is None
 
         # 実現損益が記録されていることを確認
-        realized = RealizedPnl.query.filter_by(ticker_symbol='9984').first()
+        realized = RealizedPnl.query.filter_by(ticker_symbol="9984").first()
         assert realized is not None
         assert realized.quantity == 100
         # 実現損益 = 売却額 - 取得コスト = 549,700 - 500,500 = 49,200
@@ -175,57 +176,57 @@ class TestTransactionService:
         # 買付
         buy = Transaction(
             transaction_date=date(2024, 1, 10),
-            ticker_symbol='8306',
-            security_name='三菱UFJフィナンシャル・グループ',
-            transaction_type='買付',
+            ticker_symbol="8306",
+            security_name="三菱UFJフィナンシャル・グループ",
+            transaction_type="BUY",
             quantity=500,
             unit_price=1000.0,
-            currency='JPY',
+            currency="JPY",
             commission=500.0,
-            settlement_amount=500500.0
+            settlement_amount=500500.0,
         )
         db_session.add(buy)
         db_session.commit()
 
-        TransactionService.recalculate_holding('8306')
+        TransactionService.recalculate_holding("8306")
 
-        holding_before = Holding.query.filter_by(ticker_symbol='8306').first()
+        holding_before = Holding.query.filter_by(ticker_symbol="8306").first()
         avg_cost_before = holding_before.average_cost
 
         # 部分売却
         sell = Transaction(
             transaction_date=date(2024, 2, 15),
-            ticker_symbol='8306',
-            security_name='三菱UFJフィナンシャル・グループ',
-            transaction_type='売付',
+            ticker_symbol="8306",
+            security_name="三菱UFJフィナンシャル・グループ",
+            transaction_type="SELL",
             quantity=200,
             unit_price=1100.0,
-            currency='JPY',
+            currency="JPY",
             commission=200.0,
-            settlement_amount=219800.0
+            settlement_amount=219800.0,
         )
         db_session.add(sell)
         db_session.commit()
 
-        TransactionService.recalculate_holding('8306')
+        TransactionService.recalculate_holding("8306")
 
         # 平均取得単価は変わらない
-        holding_after = Holding.query.filter_by(ticker_symbol='8306').first()
+        holding_after = Holding.query.filter_by(ticker_symbol="8306").first()
         assert holding_after.total_quantity == 300
         # 平均単価は売却前と同じ
         assert abs(holding_after.average_cost - avg_cost_before) < 0.01
 
     def test_recalculate_multiple_transactions(self, db_session, sample_transactions):
         """複数取引がある場合の再計算テスト"""
-        TransactionService.recalculate_holding('1475')
+        TransactionService.recalculate_holding("1475")
 
-        holding = Holding.query.filter_by(ticker_symbol='1475').first()
+        holding = Holding.query.filter_by(ticker_symbol="1475").first()
         assert holding is not None
         # 買付100 - 売却50 = 50
         assert holding.total_quantity == 50
 
         # 実現損益も記録されている
-        realized = RealizedPnl.query.filter_by(ticker_symbol='1475').first()
+        realized = RealizedPnl.query.filter_by(ticker_symbol="1475").first()
         assert realized is not None
         assert realized.quantity == 50
 
@@ -234,24 +235,24 @@ class TestTransactionService:
         # USD建て取引
         transaction = Transaction(
             transaction_date=date(2024, 1, 10),
-            ticker_symbol='GOOGL',
-            security_name='Alphabet Inc.',
-            transaction_type='買付',
+            ticker_symbol="GOOGL",
+            security_name="Alphabet Inc.",
+            transaction_type="BUY",
             quantity=10,
             unit_price=140.0,
-            currency='USD',
+            currency="USD",
             commission=5.0,
-            settlement_amount=210005.0
+            settlement_amount=210005.0,
         )
 
         db_session.add(transaction)
         db_session.commit()
 
-        TransactionService.recalculate_holding('GOOGL')
+        TransactionService.recalculate_holding("GOOGL")
 
-        holding = Holding.query.filter_by(ticker_symbol='GOOGL').first()
+        holding = Holding.query.filter_by(ticker_symbol="GOOGL").first()
         assert holding is not None
-        assert holding.currency == 'USD'
+        assert holding.currency == "USD"
         assert holding.total_quantity == 10
         # 平均単価 = (140 * 10 + 5) / 10 = 140.5 USD
         # ただし、settlement_amountはJPY建てなので、実際の計算はDB側で行われる
@@ -260,7 +261,7 @@ class TestTransactionService:
     def test_empty_ticker_returns_none(self, db_session):
         """存在しない銘柄の再計算"""
         # 存在しない銘柄を再計算してもエラーにならない
-        TransactionService.recalculate_holding('NONEXIST')
+        TransactionService.recalculate_holding("NONEXIST")
 
-        holding = Holding.query.filter_by(ticker_symbol='NONEXIST').first()
+        holding = Holding.query.filter_by(ticker_symbol="NONEXIST").first()
         assert holding is None
