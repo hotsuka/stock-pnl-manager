@@ -84,6 +84,27 @@
     #dividends-tfoot td {
         padding: 12px 8px;
     }
+
+    /* 年度セルのクリック可能スタイル */
+    .year-cell-clickable {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .year-cell-clickable:hover {
+        background-color: #e9ecef;
+    }
+
+    /* 配当履歴モーダル */
+    .dividend-history-modal .modal-body {
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+
+    .dividend-history-table th,
+    .dividend-history-table td {
+        padding: 8px 12px;
+    }
 </style>
 {% endblock %}
 
@@ -132,6 +153,29 @@
         </div>
     </div>
 </div>
+
+<!-- 配当履歴モーダル -->
+<div class="modal fade dividend-history-modal" id="dividendHistoryModal" tabindex="-1" aria-labelledby="dividendHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="dividendHistoryModalLabel">配当履歴</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="dividendHistoryContent">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2 mb-0">読み込み中...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -163,6 +207,9 @@
                 if (result.totals.yearly_totals) {
                     Object.keys(result.totals.yearly_totals).forEach(year => yearsSet.add(parseInt(year)));
                 }
+                // 現在の年を必ず追加（2026年列を常に表示）
+                const currentYear = new Date().getFullYear();
+                yearsSet.add(currentYear);
                 allYears = Array.from(yearsSet).sort((a, b) => b - a);
 
                 renderDividendTable(result.totals);
@@ -205,7 +252,13 @@
         tbody.innerHTML = dividendsData.map(d => {
             const yearCells = allYears.map(year => {
                 const amount = d.yearly_dividends[year.toString()] || 0;
-                return `<td class="text-end">${formatCurrency(amount)}</td>`;
+                const yearStr = year.toString();
+                // 金額がある場合はクリック可能にする
+                if (amount > 0) {
+                    return `<td class="text-end year-cell-clickable" onclick="showDividendHistory('${d.ticker_symbol}', '${yearStr}', '${d.security_name || d.ticker_symbol}')">${formatCurrency(amount)}</td>`;
+                } else {
+                    return `<td class="text-end">${formatCurrency(amount)}</td>`;
+                }
             }).join('');
 
             return `
@@ -286,7 +339,13 @@
         tbody.innerHTML = dividendsData.map(d => {
             const yearCells = allYears.map(year => {
                 const amount = d.yearly_dividends[year.toString()] || 0;
-                return `<td class="text-end">${formatCurrency(amount)}</td>`;
+                const yearStr = year.toString();
+                // 金額がある場合はクリック可能にする
+                if (amount > 0) {
+                    return `<td class="text-end year-cell-clickable" onclick="showDividendHistory('${d.ticker_symbol}', '${yearStr}', '${d.security_name || d.ticker_symbol}')">${formatCurrency(amount)}</td>`;
+                } else {
+                    return `<td class="text-end">${formatCurrency(amount)}</td>`;
+                }
             }).join('');
 
             return `
@@ -380,6 +439,110 @@
     function formatPercentage(value) {
         if (value === null || value === undefined) return '-';
         return Number(value).toFixed(2) + '%';
+    }
+
+    // 配当履歴モーダルを表示
+    async function showDividendHistory(ticker, year, securityName) {
+        const modal = new bootstrap.Modal(document.getElementById('dividendHistoryModal'));
+        const modalTitle = document.getElementById('dividendHistoryModalLabel');
+        const content = document.getElementById('dividendHistoryContent');
+
+        // モーダルタイトルを設定
+        let yearDisplay = year;
+        if (year === '2022年以前' || year === 'NaN') {
+            yearDisplay = '2022年以前';
+        } else {
+            yearDisplay = `${year}年`;
+        }
+        modalTitle.textContent = `${securityName} (${ticker}) - ${yearDisplay}の配当履歴`;
+
+        // ローディング表示
+        content.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 mb-0">読み込み中...</p>
+            </div>
+        `;
+
+        modal.show();
+
+        try {
+            // APIから配当データを取得
+            const response = await fetch(`/api/dividends/${encodeURIComponent(ticker)}`);
+            const result = await response.json();
+
+            if (!result.success) {
+                content.innerHTML = `<div class="alert alert-danger">データの読み込みに失敗しました</div>`;
+                return;
+            }
+
+            // 年度でフィルタリング
+            let filteredDividends = result.dividends;
+            if (year === '2022年以前' || year === 'NaN') {
+                filteredDividends = result.dividends.filter(d => {
+                    const divYear = new Date(d.ex_dividend_date).getFullYear();
+                    return divYear <= 2022;
+                });
+            } else {
+                const targetYear = parseInt(year);
+                filteredDividends = result.dividends.filter(d => {
+                    const divYear = new Date(d.ex_dividend_date).getFullYear();
+                    return divYear === targetYear;
+                });
+            }
+
+            if (filteredDividends.length === 0) {
+                content.innerHTML = `<div class="alert alert-info">この期間の配当データはありません</div>`;
+                return;
+            }
+
+            // テーブル生成
+            const totalDividend = filteredDividends.reduce((sum, d) => sum + (d.total_dividend || 0), 0);
+
+            content.innerHTML = `
+                <table class="table table-striped dividend-history-table">
+                    <thead>
+                        <tr>
+                            <th>権利落ち日</th>
+                            <th class="text-end">1株配当</th>
+                            <th class="text-end">保有株数</th>
+                            <th class="text-end">受取配当</th>
+                            <th>通貨</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filteredDividends.map(d => `
+                            <tr>
+                                <td>${d.ex_dividend_date}</td>
+                                <td class="text-end">${formatNumber(d.dividend_amount, 4)}</td>
+                                <td class="text-end">${formatNumber(d.quantity_held, 0)}</td>
+                                <td class="text-end">${formatNumber(d.total_dividend, 2)}</td>
+                                <td>${d.currency || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="3" class="text-end"><strong>合計</strong></td>
+                            <td class="text-end"><strong>${formatNumber(totalDividend, 2)}</strong></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+        } catch (error) {
+            console.error('配当履歴の取得エラー:', error);
+            content.innerHTML = `<div class="alert alert-danger">データの読み込みに失敗しました: ${error.message}</div>`;
+        }
+    }
+
+    // 数値フォーマット
+    function formatNumber(value, decimals) {
+        if (value === null || value === undefined) return '-';
+        return Number(value).toLocaleString('ja-JP', {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals
+        });
     }
 </script>
 {% endblock %}

@@ -94,11 +94,12 @@
                         <th class="sortable text-end" onclick="sortRealizedPnlTable('sale_proceeds')">売却額</th>
                         <th class="sortable text-end" onclick="sortRealizedPnlTable('realized_pnl')">実現済み損益</th>
                         <th class="sortable text-end" onclick="sortRealizedPnlTable('realized_pnl_pct')">損益率</th>
+                        <th class="sortable text-end" onclick="sortRealizedPnlTable('irr')">IRR</th>
                     </tr>
                 </thead>
                 <tbody id="realized-pnl-tbody">
                     <tr>
-                        <td colspan="9" class="text-center">
+                        <td colspan="10" class="text-center">
                             <div class="loading">データを読み込み中...</div>
                         </td>
                     </tr>
@@ -110,6 +111,7 @@
                         <td class="text-end" id="realized-total-proceeds"><strong>-</strong></td>
                         <td class="text-end" id="realized-total-pnl"><strong>-</strong></td>
                         <td class="text-end" id="realized-total-pnl-pct"><strong>-</strong></td>
+                        <td class="text-end" id="realized-total-irr"><strong>-</strong></td>
                     </tr>
                 </tfoot>
             </table>
@@ -124,6 +126,7 @@
     let currentRealizedSortField = null;
     let currentRealizedSortDirection = 'asc';
     let exchangeRates = {};
+    let irrData = {};
 
     // ページ読み込み時にデータ取得
     document.addEventListener('DOMContentLoaded', function () {
@@ -134,6 +137,28 @@
     async function loadData() {
         await loadExchangeRates();
         await loadRealizedPnlTable();
+        await loadIrrData();
+    }
+
+    // IRRデータの読み込み
+    async function loadIrrData() {
+        try {
+            const response = await fetch('/api/realized-pnl/irr');
+            const result = await response.json();
+
+            if (result.success) {
+                irrData = result.irr_data;
+                // IRRデータを各銘柄に追加
+                realizedPnlData = realizedPnlData.map(r => ({
+                    ...r,
+                    irr: irrData[r.ticker_symbol]?.irr || null
+                }));
+                // テーブルを再描画
+                renderRealizedPnlTable();
+            }
+        } catch (error) {
+            console.error('IRRデータの読み込みエラー:', error);
+        }
     }
 
     // 為替レートの読み込み
@@ -159,11 +184,11 @@
                 realizedPnlData = result.realized_pnl;
                 renderRealizedPnlTable(realizedPnlData);
             } else {
-                document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="9" class="text-center">売却済み銘柄がありません</td></tr>';
+                document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="10" class="text-center">売却済み銘柄がありません</td></tr>';
             }
         } catch (error) {
             console.error('実現損益データの読み込みエラー:', error);
-            document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="9" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
+            document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">データの読み込みに失敗しました</td></tr>';
         }
     }
 
@@ -179,14 +204,31 @@
         let totalCost = 0;
         let totalProceeds = 0;
         let totalPnl = 0;
+        let irrSum = 0;
+        let irrCount = 0;
 
         const rows = data.map(r => {
             totalCost += r.total_cost || 0;
             totalProceeds += r.sale_proceeds || 0;
             totalPnl += r.realized_pnl || 0;
 
+            // IRR集計
+            if (r.irr !== null && r.irr !== undefined) {
+                irrSum += r.irr;
+                irrCount++;
+            }
+
             const pnlClass = r.realized_pnl >= 0 ? 'text-success' : 'text-danger';
             const pnlPctClass = r.realized_pnl_pct >= 0 ? 'text-success' : 'text-danger';
+
+            // IRRの表示
+            let irrDisplay = '-';
+            let irrClass = '';
+            if (r.irr !== null && r.irr !== undefined) {
+                irrClass = r.irr >= 0 ? 'text-success' : 'text-danger';
+                const sign = r.irr >= 0 ? '+' : '';
+                irrDisplay = `${sign}${r.irr.toFixed(2)}%`;
+            }
 
             // Create object for sale unit price display
             const saleUnitPriceObj = {
@@ -207,6 +249,7 @@
                     <td class="text-end">${formatCurrency(r.sale_proceeds)}</td>
                     <td class="text-end ${pnlClass}">${formatCurrency(r.realized_pnl)}</td>
                     <td class="text-end ${pnlPctClass}">${formatPercentage(r.realized_pnl_pct)}</td>
+                    <td class="text-end ${irrClass}">${irrDisplay}</td>
                 </tr>
             `;
         }).join('');
@@ -218,10 +261,21 @@
         const totalPnlClass = totalPnl >= 0 ? 'text-success' : 'text-danger';
         const totalPnlPctClass = totalPnlPct >= 0 ? 'text-success' : 'text-danger';
 
+        // IRR平均
+        const avgIrr = irrCount > 0 ? irrSum / irrCount : null;
+        let avgIrrDisplay = '-';
+        let avgIrrClass = '';
+        if (avgIrr !== null) {
+            avgIrrClass = avgIrr >= 0 ? 'text-success' : 'text-danger';
+            const sign = avgIrr >= 0 ? '+' : '';
+            avgIrrDisplay = `${sign}${avgIrr.toFixed(2)}%`;
+        }
+
         document.getElementById('realized-total-cost').innerHTML = `<strong>${formatCurrency(totalCost)}</strong>`;
         document.getElementById('realized-total-proceeds').innerHTML = `<strong>${formatCurrency(totalProceeds)}</strong>`;
         document.getElementById('realized-total-pnl').innerHTML = `<strong class="${totalPnlClass}">${formatCurrency(totalPnl)}</strong>`;
         document.getElementById('realized-total-pnl-pct').innerHTML = `<strong class="${totalPnlPctClass}">${formatPercentage(totalPnlPct)}</strong>`;
+        document.getElementById('realized-total-irr').innerHTML = `<strong class="${avgIrrClass}">${avgIrrDisplay}</strong>`;
 
         tfoot.classList.remove('d-none');
     }
@@ -275,7 +329,8 @@
                 'total_cost': 5,
                 'sale_proceeds': 6,
                 'realized_pnl': 7,
-                'realized_pnl_pct': 8
+                'realized_pnl_pct': 8,
+                'irr': 9
             };
             const index = fieldMap[currentRealizedSortField];
             if (index !== undefined) {

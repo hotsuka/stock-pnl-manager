@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 
-# Base directory
-BASE_DIR = Path(__file__).parent.absolute()
+# Base directory - resolve()を使用してシンボリックリンクを解決
+BASE_DIR = Path(__file__).resolve().parent
 
 class Config:
     """Base configuration"""
@@ -11,8 +11,10 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-please-change-in-production'
 
     # Database configuration
+    # Windows環境でのパス区切り文字の問題を解決するため、as_posix()を使用
+    _db_path = (BASE_DIR / "data" / "stock_pnl.db").as_posix()
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        f'sqlite:///{BASE_DIR / "data" / "stock_pnl.db"}'
+        f'sqlite:///{_db_path}'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # File upload configuration

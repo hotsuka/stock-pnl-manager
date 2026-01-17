@@ -130,6 +130,33 @@
         padding-bottom: 10px;
         margin-bottom: 15px;
     }
+
+    .modal-sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+        padding-right: 20px !important;
+    }
+
+    .modal-sortable:hover {
+        background-color: #e9ecef;
+    }
+
+    .modal-sortable::after {
+        content: '';
+        position: absolute;
+        right: 5px;
+    }
+
+    .modal-sortable.asc::after {
+        content: '▲';
+        opacity: 1;
+    }
+
+    .modal-sortable.desc::after {
+        content: '▼';
+        opacity: 1;
+    }
 </style>
 
 <!-- Plotly.js -->
@@ -574,32 +601,54 @@
         }
     }
 
+    // モーダル内のソート状態を管理
+    let modalSortState = {
+        holding: { field: null, direction: 'asc' },
+        realized: { field: null, direction: 'asc' },
+        dividend: { field: null, direction: 'asc' }
+    };
+    let cachedDetails = {}; // 現在表示中の詳細データをキャッシュ
+
     function renderHoldingDetails(details, isMonthly = false) {
         if (details.length === 0) {
             return '<div class="alert alert-info">この日の保有損益はありません</div>';
         }
 
+        // データをキャッシュに保存
+        cachedDetails.holding = details;
+        cachedDetails.holdingIsMonthly = isMonthly;
+
         const total = details.reduce((sum, d) => sum + d.pnl, 0);
 
         // 月次と日次でヘッダーを変更
-        const prevPriceLabel = isMonthly ? '前月末株価' : '前日株価';
+        // 新規取得銘柄がある場合はヘッダーに両方のラベルを表示
+        const hasNewThisMonth = isMonthly && details.some(d => d.is_new_this_month);
+        const prevPriceLabel = isMonthly ? (hasNewThisMonth ? '前月末/取得価格' : '前月末株価') : '前日株価';
         const currPriceLabel = isMonthly ? '当月末株価' : '当日株価';
+
+        // ソート状態に応じてクラスを設定
+        const getSortClass = (field) => {
+            if (modalSortState.holding.field === field) {
+                return `modal-sortable ${modalSortState.holding.direction}`;
+            }
+            return 'modal-sortable';
+        };
 
         let html = `
             <div class="detail-section">
                 <h6>保有損益の内訳 (合計: ${formatCurrency(total)})</h6>
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover">
+                    <table class="table table-sm table-hover" id="holding-detail-table">
                         <thead class="table-light">
                             <tr>
-                                <th>ティッカー</th>
-                                <th>銘柄名</th>
-                                <th class="text-end">保有数量</th>
+                                <th class="${getSortClass('ticker_symbol')}" onclick="sortModalTable('holding', 'ticker_symbol')">ティッカー</th>
+                                <th class="${getSortClass('security_name')}" onclick="sortModalTable('holding', 'security_name')">銘柄名</th>
+                                <th class="text-end ${getSortClass('quantity')}" onclick="sortModalTable('holding', 'quantity')">保有数量</th>
                                 <th class="text-end">${prevPriceLabel}</th>
                                 <th class="text-end">${currPriceLabel}</th>
-                                <th class="text-end">株価変動</th>
+                                <th class="text-end ${getSortClass('price_change_pct')}" onclick="sortModalTable('holding', 'price_change_pct')">株価変動率</th>
                                 <th class="text-end">為替レート</th>
-                                <th class="text-end">損益</th>
+                                <th class="text-end ${getSortClass('pnl')}" onclick="sortModalTable('holding', 'pnl')">損益</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -607,17 +656,21 @@
 
         details.forEach(d => {
             const pnlClass = d.pnl >= 0 ? 'text-positive' : 'text-negative';
-            const changeClass = d.price_change >= 0 ? 'text-positive' : 'text-negative';
+            // 変動率を計算
+            const priceChangePct = d.prev_price > 0 ? ((d.curr_price - d.prev_price) / d.prev_price * 100) : 0;
+            const changeClass = priceChangePct >= 0 ? 'text-positive' : 'text-negative';
             const exchangeRate = d.currency === 'JPY' ? '-' : d.exchange_rate.toFixed(2);
+            // 新規取得銘柄の場合は「(取得)」ラベルを追加
+            const prevPriceNote = (isMonthly && d.is_new_this_month) ? '<br><small class="text-muted">(取得価格)</small>' : '';
 
             html += `
                 <tr>
                     <td><strong>${d.ticker_symbol}</strong></td>
                     <td>${d.security_name}</td>
                     <td class="text-end">${d.quantity.toLocaleString('ja-JP', {maximumFractionDigits: 2})}</td>
-                    <td class="text-end">${d.prev_price.toLocaleString('ja-JP', {maximumFractionDigits: 2})} ${d.currency}</td>
+                    <td class="text-end">${d.prev_price.toLocaleString('ja-JP', {maximumFractionDigits: 2})} ${d.currency}${prevPriceNote}</td>
                     <td class="text-end">${d.curr_price.toLocaleString('ja-JP', {maximumFractionDigits: 2})} ${d.currency}</td>
-                    <td class="text-end ${changeClass}">${d.price_change >= 0 ? '+' : ''}${d.price_change.toLocaleString('ja-JP', {maximumFractionDigits: 2})} ${d.currency}</td>
+                    <td class="text-end ${changeClass}">${priceChangePct >= 0 ? '+' : ''}${priceChangePct.toFixed(2)}%</td>
                     <td class="text-end">${exchangeRate}</td>
                     <td class="text-end fw-bold ${pnlClass}">${formatCurrency(d.pnl)}</td>
                 </tr>
@@ -634,27 +687,103 @@
         return html;
     }
 
+    // モーダル内テーブルのソート機能
+    function sortModalTable(type, field) {
+        // ソート方向を切り替え
+        if (modalSortState[type].field === field) {
+            modalSortState[type].direction = modalSortState[type].direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            modalSortState[type].field = field;
+            modalSortState[type].direction = 'asc';
+        }
+
+        // キャッシュされたデータをソート
+        let data;
+        if (type === 'holding') {
+            data = [...cachedDetails.holding];
+            // 変動率の計算が必要な場合
+            if (field === 'price_change_pct') {
+                data.forEach(d => {
+                    d.price_change_pct = d.prev_price > 0 ? ((d.curr_price - d.prev_price) / d.prev_price * 100) : 0;
+                });
+            }
+        } else if (type === 'realized') {
+            data = [...cachedDetails.realized];
+        } else if (type === 'dividend') {
+            data = [...cachedDetails.dividend];
+        }
+
+        if (!data) return;
+
+        // ソート実行
+        data.sort((a, b) => {
+            let aVal = a[field];
+            let bVal = b[field];
+
+            // null/undefined の処理
+            if (aVal == null) aVal = '';
+            if (bVal == null) bVal = '';
+
+            // 文字列の場合
+            if (typeof aVal === 'string') {
+                aVal = aVal.toLowerCase();
+                bVal = bVal.toLowerCase();
+            }
+
+            let comparison = 0;
+            if (aVal > bVal) comparison = 1;
+            else if (aVal < bVal) comparison = -1;
+
+            return modalSortState[type].direction === 'asc' ? comparison : -comparison;
+        });
+
+        // 再描画
+        const detailContent = document.getElementById('detailContent');
+        if (type === 'holding') {
+            cachedDetails.holding = data;
+            detailContent.innerHTML = renderHoldingDetails(data, cachedDetails.holdingIsMonthly);
+        } else if (type === 'realized') {
+            cachedDetails.realized = data;
+            detailContent.innerHTML = renderRealizedDetails(data, cachedDetails.realizedIsMonthly);
+        } else if (type === 'dividend') {
+            cachedDetails.dividend = data;
+            detailContent.innerHTML = renderDividendDetails(data, cachedDetails.dividendIsMonthly);
+        }
+    }
+
     function renderRealizedDetails(details, isMonthly = false) {
         if (details.length === 0) {
             const message = isMonthly ? 'この月の実現損益はありません' : 'この日の実現損益はありません';
             return `<div class="alert alert-info">${message}</div>`;
         }
 
+        // データをキャッシュに保存
+        cachedDetails.realized = details;
+        cachedDetails.realizedIsMonthly = isMonthly;
+
         const total = details.reduce((sum, d) => sum + d.pnl, 0);
+
+        // ソート状態に応じてクラスを設定
+        const getSortClass = (field) => {
+            if (modalSortState.realized.field === field) {
+                return `modal-sortable ${modalSortState.realized.direction}`;
+            }
+            return 'modal-sortable';
+        };
 
         let html = `
             <div class="detail-section">
                 <h6>実現損益の内訳 (合計: ${formatCurrency(total)})</h6>
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover">
+                    <table class="table table-sm table-hover" id="realized-detail-table">
                         <thead class="table-light">
                             <tr>
-                                <th>ティッカー</th>
-                                <th>銘柄名</th>
-                                <th class="text-end">売却数量</th>
-                                <th class="text-end">平均取得単価</th>
-                                <th class="text-end">売却単価</th>
-                                <th class="text-end">実現損益</th>
+                                <th class="${getSortClass('ticker_symbol')}" onclick="sortModalTable('realized', 'ticker_symbol')">ティッカー</th>
+                                <th class="${getSortClass('security_name')}" onclick="sortModalTable('realized', 'security_name')">銘柄名</th>
+                                <th class="text-end ${getSortClass('quantity')}" onclick="sortModalTable('realized', 'quantity')">売却数量</th>
+                                <th class="text-end ${getSortClass('average_cost')}" onclick="sortModalTable('realized', 'average_cost')">平均取得単価</th>
+                                <th class="text-end ${getSortClass('sell_price')}" onclick="sortModalTable('realized', 'sell_price')">売却単価</th>
+                                <th class="text-end ${getSortClass('pnl')}" onclick="sortModalTable('realized', 'pnl')">実現損益</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -691,35 +820,47 @@
             return `<div class="alert alert-info">${message}</div>`;
         }
 
+        // データをキャッシュに保存
+        cachedDetails.dividend = details;
+        cachedDetails.dividendIsMonthly = isMonthly;
+
         const total = details.reduce((sum, d) => sum + d.total_dividend, 0);
+
+        // ソート状態に応じてクラスを設定
+        const getSortClass = (field) => {
+            if (modalSortState.dividend.field === field) {
+                return `modal-sortable ${modalSortState.dividend.direction}`;
+            }
+            return 'modal-sortable';
+        };
 
         let html = `
             <div class="detail-section">
                 <h6>配当受取の内訳 (合計: ${formatCurrency(total)})</h6>
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover">
+                    <table class="table table-sm table-hover" id="dividend-detail-table">
                         <thead class="table-light">
                             <tr>
-                                <th>ティッカー</th>
-                                <th>銘柄名</th>
-                                <th class="text-end">保有数量</th>
-                                <th class="text-end">1株あたり配当</th>
+                                <th class="${getSortClass('ticker_symbol')}" onclick="sortModalTable('dividend', 'ticker_symbol')">ティッカー</th>
+                                <th class="${getSortClass('security_name')}" onclick="sortModalTable('dividend', 'security_name')">銘柄名</th>
+                                <th class="text-end ${getSortClass('quantity')}" onclick="sortModalTable('dividend', 'quantity')">保有数量</th>
+                                <th class="text-end ${getSortClass('dividend_per_share')}" onclick="sortModalTable('dividend', 'dividend_per_share')">1株あたり配当</th>
                                 <th class="text-end">為替レート</th>
-                                <th class="text-end">受取配当額</th>
+                                <th class="text-end ${getSortClass('total_dividend')}" onclick="sortModalTable('dividend', 'total_dividend')">受取配当額</th>
                             </tr>
                         </thead>
                         <tbody>
         `;
 
         details.forEach(d => {
-            const exchangeRate = d.currency === 'JPY' ? '-' : d.exchange_rate.toFixed(2);
+            const exchangeRate = d.currency === 'JPY' ? '-' : (d.exchange_rate ? d.exchange_rate.toFixed(2) : '-');
 
             html += `
                 <tr>
                     <td><strong>${d.ticker_symbol}</strong></td>
                     <td>${d.security_name}</td>
-                    <td class="text-end">${d.quantity.toLocaleString('ja-JP', {maximumFractionDigits: 2})}</td>
-                    <td class="text-end">${d.dividend_per_share.toLocaleString('ja-JP', {maximumFractionDigits: 4})} ${d.currency}</td>
+                    <td class="text-end">${d.quantity ? d.quantity.toLocaleString('ja-JP', {maximumFractionDigits: 2}) : '-'}</td>
+                    <td class="text-end">${d.dividend_per_share ? d.dividend_per_share.toLocaleString('ja-JP', {maximumFractionDigits: 4}) + ' ' + d.currency : '-'}</td>
                     <td class="text-end">${exchangeRate}</td>
                     <td class="text-end fw-bold text-positive">${formatCurrency(d.total_dividend)}</td>
                 </tr>

@@ -88,6 +88,22 @@
         background-color: #f8f9fa !important;
     }
 
+    /* 評価指標テーブルのSticky Header */
+    #metrics1-table thead th,
+    #metrics2-table thead th {
+        position: sticky;
+        top: 56px;
+        background-color: #fff !important;
+        z-index: 1020;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    #metrics1-table thead th.sortable:hover,
+    #metrics2-table thead th.sortable:hover {
+        background-color: #f8f9fa !important;
+    }
+
     .loading {
         text-align: center;
         padding: 40px;
@@ -145,12 +161,13 @@
                                 <th class="sortable text-end" onclick="sortTable('current_value')">評価額</th>
                                 <th class="sortable text-end" onclick="sortTable('unrealized_pnl')">未実現損益</th>
                                 <th class="sortable text-end" onclick="sortTable('unrealized_pnl_pct')">損益率</th>
+                                <th class="sortable text-end" onclick="sortTable('irr')">IRR</th>
                                 <th class="sortable text-end" onclick="sortTable('day_change_pct')">対前日変動率</th>
                             </tr>
                         </thead>
                         <tbody id="holdings-tbody">
                             <tr>
-                                <td colspan="10" class="text-center">
+                                <td colspan="11" class="text-center">
                                     <div class="loading">データを読み込み中...</div>
                                 </td>
                             </tr>
@@ -162,6 +179,7 @@
                                 <td class="text-end" id="total-value"><strong>-</strong></td>
                                 <td class="text-end" id="holdings-total-pnl"><strong>-</strong></td>
                                 <td class="text-end" id="holdings-total-pnl-pct"><strong>-</strong></td>
+                                <td class="text-end" id="holdings-total-irr"><strong>-</strong></td>
                                 <td class="text-end" id="holdings-total-day-change"><strong>-</strong></td>
                             </tr>
                         </tfoot>
@@ -177,16 +195,16 @@
                     <table class="table table-hover" id="metrics1-table">
                         <thead>
                             <tr>
-                                <th>ティッカー</th>
-                                <th>銘柄名</th>
-                                <th class="text-end">株価</th>
-                                <th class="text-end">時価総額</th>
-                                <th class="text-end">Beta</th>
-                                <th class="text-end">PER</th>
-                                <th class="text-end">PBR</th>
-                                <th class="text-end">EPS</th>
-                                <th class="text-end">EV/売上</th>
-                                <th class="text-end">EV/EBITDA</th>
+                                <th class="sortable" onclick="sortMetrics1Table('ticker_symbol')">ティッカー</th>
+                                <th class="sortable" onclick="sortMetrics1Table('security_name')">銘柄名</th>
+                                <th class="sortable text-end" onclick="sortMetrics1Table('current_price')">株価</th>
+                                <th class="sortable text-end" onclick="sortMetrics1Table('market_cap')">時価総額</th>
+                                <th class="sortable text-end" onclick="sortMetrics1Table('beta')">Beta</th>
+                                <th class="sortable text-end" onclick="sortMetrics1Table('pe_ratio')">PER</th>
+                                <th class="sortable text-end" onclick="sortMetrics1Table('pb_ratio')">PBR</th>
+                                <th class="sortable text-end" onclick="sortMetrics1Table('eps')">EPS</th>
+                                <th class="sortable text-end" onclick="sortMetrics1Table('ev_to_revenue')">EV/売上</th>
+                                <th class="sortable text-end" onclick="sortMetrics1Table('ev_to_ebitda')">EV/EBITDA</th>
                             </tr>
                         </thead>
                         <tbody id="metrics1-tbody">
@@ -208,15 +226,15 @@
                     <table class="table table-hover" id="metrics2-table">
                         <thead>
                             <tr>
-                                <th>ティッカー</th>
-                                <th>銘柄名</th>
-                                <th class="text-end">株価</th>
-                                <th class="text-end">対前日変動率</th>
-                                <th class="text-end">YTDリターン</th>
-                                <th class="text-end">1年リターン</th>
+                                <th class="sortable" onclick="sortMetrics2Table('ticker_symbol')">ティッカー</th>
+                                <th class="sortable" onclick="sortMetrics2Table('security_name')">銘柄名</th>
+                                <th class="sortable text-end" onclick="sortMetrics2Table('current_price')">株価</th>
+                                <th class="sortable text-end" onclick="sortMetrics2Table('day_change_pct')">対前日変動率</th>
+                                <th class="sortable text-end" onclick="sortMetrics2Table('ytd_return')">YTDリターン</th>
+                                <th class="sortable text-end" onclick="sortMetrics2Table('one_year_return')">1年リターン</th>
                                 <th>52週レンジ</th>
-                                <th class="text-end">売上</th>
-                                <th class="text-end">利益率</th>
+                                <th class="sortable text-end" onclick="sortMetrics2Table('revenue')">売上</th>
+                                <th class="sortable text-end" onclick="sortMetrics2Table('profit_margin')">利益率</th>
                             </tr>
                         </thead>
                         <tbody id="metrics2-tbody">
@@ -238,9 +256,15 @@
 <script>
     let holdingsData = [];
     let metricsData = [];
+    let irrData = {};
     let currentSortField = null;
     let currentSortDirection = 'asc';
     let exchangeRates = {};
+    // 評価指標タブ用のソート状態
+    let metrics1SortField = null;
+    let metrics1SortDirection = 'asc';
+    let metrics2SortField = null;
+    let metrics2SortDirection = 'asc';
 
     // ページ読み込み時にデータ取得
     document.addEventListener('DOMContentLoaded', function () {
@@ -297,8 +321,30 @@
             }));
         }
 
-        // 4. テーブル描画
+        // 4. IRRデータを取得
+        await loadIrrData();
+
+        // 5. テーブル描画
         renderHoldingsTable();
+    }
+
+    // IRRデータの読み込み
+    async function loadIrrData() {
+        try {
+            const response = await fetch('/api/holdings/irr');
+            const result = await response.json();
+
+            if (result.success) {
+                irrData = result.irr_data;
+                // holdingsDataにIRRを追加
+                holdingsData = holdingsData.map(h => ({
+                    ...h,
+                    irr: irrData[h.ticker_symbol]?.irr || null
+                }));
+            }
+        } catch (error) {
+            console.error('IRRデータの読み込みエラー:', error);
+        }
     }
 
     // 保有銘柄データの取得（描画はしない）
@@ -426,7 +472,7 @@
         const tbody = document.getElementById('holdings-tbody');
 
         if (holdingsData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center">保有銘柄がありません</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center">保有銘柄がありません</td></tr>';
             document.getElementById('holdings-tfoot').classList.add('d-none');
             return;
         }
@@ -435,6 +481,7 @@
             const unrealizedPnL = calculateUnrealizedPnL(h);
             const unrealizedPnLPct = calculateUnrealizedPnLPct(h);
             const pnlClass = unrealizedPnL !== null && unrealizedPnL >= 0 ? 'positive' : 'negative';
+            const irrClass = h.irr !== null && h.irr >= 0 ? 'positive' : 'negative';
 
             return `
                 <tr>
@@ -450,6 +497,9 @@
                     </td>
                     <td class="text-end ${pnlClass}">
                         ${unrealizedPnLPct !== null ? formatPercentage(unrealizedPnLPct) : '-'}
+                    </td>
+                    <td class="text-end ${irrClass}">
+                        ${h.irr !== null ? formatPercentage(h.irr) : '-'}
                     </td>
                     <td class="text-end ${h.day_change_pct !== null && h.day_change_pct >= 0 ? 'positive' : 'negative'}">
                         ${h.day_change_pct !== null ? formatPercentage(h.day_change_pct) : '-'}
@@ -480,6 +530,17 @@
         const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
         document.getElementById('holdings-total-pnl-pct').innerHTML = `<strong class="${pnlClass}">${formatPercentage(totalPnLPct)}</strong>`;
         document.getElementById('holdings-total-pnl-pct').className = `text-end ${pnlClass}`;
+
+        // Display IRR (average of all holdings with valid IRR)
+        const validIrrs = holdingsData.filter(h => h.irr !== null).map(h => h.irr);
+        if (validIrrs.length > 0) {
+            const avgIrr = validIrrs.reduce((sum, irr) => sum + irr, 0) / validIrrs.length;
+            const irrClass = avgIrr >= 0 ? 'positive' : 'negative';
+            document.getElementById('holdings-total-irr').innerHTML = `<strong class="${irrClass}">${formatPercentage(avgIrr)}</strong>`;
+            document.getElementById('holdings-total-irr').className = `text-end ${irrClass}`;
+        } else {
+            document.getElementById('holdings-total-irr').innerHTML = `<strong>-</strong>`;
+        }
 
         // Calculate and display total day change percentage
         let totalYesterdayValue = 0;
@@ -526,6 +587,12 @@
                 // total_cost is already in JPY
                 aValue = a.total_cost;
                 bValue = b.total_cost;
+            } else if (field === 'irr') {
+                aValue = a.irr;
+                bValue = b.irr;
+            } else if (field === 'day_change_pct') {
+                aValue = a.day_change_pct;
+                bValue = b.day_change_pct;
             } else {
                 aValue = a[field];
                 bValue = b[field];
@@ -567,7 +634,8 @@
                 'current_value': 6,
                 'unrealized_pnl': 7,
                 'unrealized_pnl_pct': 8,
-                'day_change_pct': 9
+                'irr': 9,
+                'day_change_pct': 10
             };
             const index = fieldMap[currentSortField];
             if (index !== undefined) {
@@ -867,6 +935,169 @@
         if (value === null || value === undefined) return '-';
         const sign = value >= 0 ? '+' : '';
         return sign + Number(value).toFixed(2) + '%';
+    }
+
+    // 評価指標1テーブルのソート
+    function sortMetrics1Table(field) {
+        if (metrics1SortField === field) {
+            metrics1SortDirection = metrics1SortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            metrics1SortField = field;
+            metrics1SortDirection = 'asc';
+        }
+
+        metricsData.sort((a, b) => {
+            let aValue, bValue;
+
+            // holdingsDataから株価等を取得
+            const aHolding = holdingsData.find(h => h.ticker_symbol === a.ticker_symbol);
+            const bHolding = holdingsData.find(h => h.ticker_symbol === b.ticker_symbol);
+
+            if (field === 'ticker_symbol') {
+                aValue = a.ticker_symbol;
+                bValue = b.ticker_symbol;
+            } else if (field === 'security_name') {
+                aValue = getSecurityName(a.ticker_symbol);
+                bValue = getSecurityName(b.ticker_symbol);
+            } else if (field === 'current_price') {
+                aValue = aHolding ? aHolding.current_price : null;
+                bValue = bHolding ? bHolding.current_price : null;
+            } else {
+                aValue = a[field];
+                bValue = b[field];
+            }
+
+            // null/undefinedを最後に配置
+            const aIsNull = aValue === null || aValue === undefined;
+            const bIsNull = bValue === null || bValue === undefined;
+            if (aIsNull && bIsNull) return 0;
+            if (aIsNull) return 1;
+            if (bIsNull) return -1;
+
+            // 文字列の場合は小文字で比較
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                aValue = aValue.toLowerCase();
+                bValue = bValue.toLowerCase();
+            }
+
+            let comparison = 0;
+            if (aValue > bValue) comparison = 1;
+            else if (aValue < bValue) comparison = -1;
+
+            return metrics1SortDirection === 'asc' ? comparison : -comparison;
+        });
+
+        renderMetrics1Table();
+        updateMetrics1SortIndicators();
+    }
+
+    // 評価指標1ソートインジケーター更新
+    function updateMetrics1SortIndicators() {
+        document.querySelectorAll('#metrics1-table .sortable').forEach(th => {
+            th.classList.remove('asc', 'desc');
+        });
+
+        if (metrics1SortField) {
+            const fieldMap = {
+                'ticker_symbol': 0,
+                'security_name': 1,
+                'current_price': 2,
+                'market_cap': 3,
+                'beta': 4,
+                'pe_ratio': 5,
+                'pb_ratio': 6,
+                'eps': 7,
+                'ev_to_revenue': 8,
+                'ev_to_ebitda': 9
+            };
+            const index = fieldMap[metrics1SortField];
+            if (index !== undefined) {
+                const headers = document.querySelectorAll('#metrics1-table thead th');
+                headers[index].classList.add(metrics1SortDirection);
+            }
+        }
+    }
+
+    // 評価指標2テーブルのソート
+    function sortMetrics2Table(field) {
+        if (metrics2SortField === field) {
+            metrics2SortDirection = metrics2SortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            metrics2SortField = field;
+            metrics2SortDirection = 'asc';
+        }
+
+        metricsData.sort((a, b) => {
+            let aValue, bValue;
+
+            // holdingsDataから株価等を取得
+            const aHolding = holdingsData.find(h => h.ticker_symbol === a.ticker_symbol);
+            const bHolding = holdingsData.find(h => h.ticker_symbol === b.ticker_symbol);
+
+            if (field === 'ticker_symbol') {
+                aValue = a.ticker_symbol;
+                bValue = b.ticker_symbol;
+            } else if (field === 'security_name') {
+                aValue = getSecurityName(a.ticker_symbol);
+                bValue = getSecurityName(b.ticker_symbol);
+            } else if (field === 'current_price') {
+                aValue = aHolding ? aHolding.current_price : null;
+                bValue = bHolding ? bHolding.current_price : null;
+            } else if (field === 'day_change_pct') {
+                aValue = aHolding ? aHolding.day_change_pct : null;
+                bValue = bHolding ? bHolding.day_change_pct : null;
+            } else {
+                aValue = a[field];
+                bValue = b[field];
+            }
+
+            // null/undefinedを最後に配置
+            const aIsNull = aValue === null || aValue === undefined;
+            const bIsNull = bValue === null || bValue === undefined;
+            if (aIsNull && bIsNull) return 0;
+            if (aIsNull) return 1;
+            if (bIsNull) return -1;
+
+            // 文字列の場合は小文字で比較
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                aValue = aValue.toLowerCase();
+                bValue = bValue.toLowerCase();
+            }
+
+            let comparison = 0;
+            if (aValue > bValue) comparison = 1;
+            else if (aValue < bValue) comparison = -1;
+
+            return metrics2SortDirection === 'asc' ? comparison : -comparison;
+        });
+
+        renderMetrics2Table();
+        updateMetrics2SortIndicators();
+    }
+
+    // 評価指標2ソートインジケーター更新
+    function updateMetrics2SortIndicators() {
+        document.querySelectorAll('#metrics2-table .sortable').forEach(th => {
+            th.classList.remove('asc', 'desc');
+        });
+
+        if (metrics2SortField) {
+            const fieldMap = {
+                'ticker_symbol': 0,
+                'security_name': 1,
+                'current_price': 2,
+                'day_change_pct': 3,
+                'ytd_return': 4,
+                'one_year_return': 5,
+                'revenue': 7,
+                'profit_margin': 8
+            };
+            const index = fieldMap[metrics2SortField];
+            if (index !== undefined) {
+                const headers = document.querySelectorAll('#metrics2-table thead th');
+                headers[index].classList.add(metrics2SortDirection);
+            }
+        }
     }
 </script>
 {% endblock %}

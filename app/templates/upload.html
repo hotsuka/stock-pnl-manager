@@ -1,30 +1,160 @@
 {% extends "base.html" %}
 
-{% block title %}CSV取り込み - Stock P&L Manager{% endblock %}
+{% block title %}取引登録 - Stock P&L Manager{% endblock %}
 
 {% block content %}
 <div class="row">
-    <div class="col-md-8 offset-md-2">
-        <h2>SBI証券 取引履歴CSV取り込み</h2>
+    <div class="col-md-10 offset-md-1">
+        <h2>取引登録</h2>
         <hr>
 
-        <!-- アップロードフォーム -->
-        <div class="card">
-            <div class="card-body">
-                <form id="uploadForm" enctype="multipart/form-data">
-                    <div class="mb-3">
-                        <label for="csvFile" class="form-label">CSVファイルを選択</label>
-                        <input class="form-control" type="file" id="csvFile" name="file" accept=".csv" required>
-                        <div class="form-text">
-                            SBI証券からダウンロードした取引履歴CSVファイルを選択してください（最大10MB）
-                        </div>
-                    </div>
+        <!-- タブナビゲーション -->
+        <ul class="nav nav-tabs mb-4" id="inputTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="csv-tab" data-bs-toggle="tab" data-bs-target="#csv-input" type="button" role="tab">
+                    CSV取り込み
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual-input" type="button" role="tab">
+                    個別入力
+                </button>
+            </li>
+        </ul>
 
-                    <button type="submit" class="btn btn-primary" id="uploadBtn">
-                        <span class="spinner-border spinner-border-sm d-none" id="uploadSpinner"></span>
-                        アップロード
-                    </button>
-                </form>
+        <div class="tab-content" id="inputTabsContent">
+            <!-- CSV取り込みタブ -->
+            <div class="tab-pane fade show active" id="csv-input" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">SBI証券 取引履歴CSV取り込み</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="uploadForm" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="csvFile" class="form-label">CSVファイルを選択</label>
+                                <input class="form-control" type="file" id="csvFile" name="file" accept=".csv" required>
+                                <div class="form-text">
+                                    SBI証券からダウンロードした取引履歴CSVファイルを選択してください（最大10MB）
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary" id="uploadBtn">
+                                <span class="spinner-border spinner-border-sm d-none" id="uploadSpinner"></span>
+                                アップロード
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 個別入力タブ -->
+            <div class="tab-pane fade" id="manual-input" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">取引の個別入力</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="manualTransactionForm">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="transactionDate" class="form-label">取引日 <span class="text-danger">*</span></label>
+                                        <input type="date" class="form-control" id="transactionDate" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="transactionType" class="form-label">取引種別 <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="transactionType" required>
+                                            <option value="">選択してください</option>
+                                            <option value="BUY">買付</option>
+                                            <option value="SELL">売却</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="tickerSymbol" class="form-label">ティッカーシンボル <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="tickerSymbol" placeholder="例: AAPL, 7203.T" required>
+                                        <div class="form-text">
+                                            日本株は数字のみ、または.T付き。米国株はそのまま入力
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="securityName" class="form-label">銘柄名</label>
+                                        <input type="text" class="form-control" id="securityName" placeholder="例: Apple Inc.">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="quantity" class="form-label">数量 <span class="text-danger">*</span></label>
+                                        <input type="number" class="form-control" id="quantity" step="0.0001" min="0.0001" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="unitPrice" class="form-label">単価（現地通貨） <span class="text-danger">*</span></label>
+                                        <input type="number" class="form-control" id="unitPrice" step="0.0001" min="0" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="currency" class="form-label">通貨 <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="currency" required>
+                                            <option value="JPY">JPY (日本円)</option>
+                                            <option value="USD">USD (米ドル)</option>
+                                            <option value="KRW">KRW (韓国ウォン)</option>
+                                            <option value="HKD">HKD (香港ドル)</option>
+                                            <option value="GBP">GBP (英ポンド)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="commission" class="form-label">手数料（円）</label>
+                                        <input type="number" class="form-control" id="commission" step="1" min="0" value="0">
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="exchangeRate" class="form-label">為替レート（対円）</label>
+                                        <input type="number" class="form-control" id="exchangeRate" step="0.0001" min="0">
+                                        <div class="form-text">空欄の場合は自動取得</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="settlementAmount" class="form-label">受渡金額（円） <span class="text-danger">*</span></label>
+                                        <input type="number" class="form-control" id="settlementAmount" step="1" required>
+                                        <div class="form-text">実際の円建て支払/受取額</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <button type="submit" class="btn btn-primary" id="manualSubmitBtn">
+                                    <span class="spinner-border spinner-border-sm d-none" id="manualSpinner"></span>
+                                    取引を登録
+                                </button>
+                                <button type="button" class="btn btn-secondary ms-2" onclick="calculateSettlement()">
+                                    受渡金額を計算
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -67,6 +197,32 @@
 
 {% block extra_js %}
 <script>
+// 初期化
+document.addEventListener('DOMContentLoaded', function() {
+    // 今日の日付をデフォルトに設定
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('transactionDate').value = today;
+
+    // ティッカーシンボル変更時に通貨を自動設定
+    document.getElementById('tickerSymbol').addEventListener('blur', function() {
+        const ticker = this.value.toUpperCase();
+        const currencySelect = document.getElementById('currency');
+
+        if (ticker.endsWith('.T') || /^\d+$/.test(ticker)) {
+            currencySelect.value = 'JPY';
+        } else if (ticker.endsWith('.KS') || ticker.endsWith('.KQ')) {
+            currencySelect.value = 'KRW';
+        } else if (ticker.endsWith('.HK')) {
+            currencySelect.value = 'HKD';
+        } else if (ticker.endsWith('.L')) {
+            currencySelect.value = 'GBP';
+        } else if (!ticker.includes('.')) {
+            currencySelect.value = 'USD';
+        }
+    });
+});
+
+// CSV アップロードフォーム
 document.getElementById('uploadForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
@@ -103,6 +259,127 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
         uploadSpinner.classList.add('d-none');
     }
 });
+
+// 個別入力フォーム
+document.getElementById('manualTransactionForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const btn = document.getElementById('manualSubmitBtn');
+    const spinner = document.getElementById('manualSpinner');
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+
+    const resultArea = document.getElementById('resultArea');
+    resultArea.classList.add('d-none');
+
+    try {
+        // フォームデータを収集
+        const transactionData = {
+            transaction_date: document.getElementById('transactionDate').value,
+            transaction_type: document.getElementById('transactionType').value,
+            ticker_symbol: document.getElementById('tickerSymbol').value.toUpperCase(),
+            security_name: document.getElementById('securityName').value || null,
+            quantity: parseFloat(document.getElementById('quantity').value),
+            unit_price: parseFloat(document.getElementById('unitPrice').value),
+            currency: document.getElementById('currency').value,
+            commission: parseFloat(document.getElementById('commission').value) || 0,
+            exchange_rate: parseFloat(document.getElementById('exchangeRate').value) || null,
+            settlement_amount: parseFloat(document.getElementById('settlementAmount').value)
+        };
+
+        const response = await fetch('/api/transactions/manual', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(transactionData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showManualSuccess(result);
+            // フォームをリセット
+            document.getElementById('manualTransactionForm').reset();
+            // 今日の日付を再設定
+            document.getElementById('transactionDate').value = new Date().toISOString().split('T')[0];
+        } else {
+            showError({ error: result.error || '取引の登録に失敗しました' });
+        }
+    } catch (error) {
+        showError({ error: '通信エラーが発生しました: ' + error.message });
+    } finally {
+        btn.disabled = false;
+        spinner.classList.add('d-none');
+    }
+});
+
+// 受渡金額を自動計算
+async function calculateSettlement() {
+    const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+    const unitPrice = parseFloat(document.getElementById('unitPrice').value) || 0;
+    const commission = parseFloat(document.getElementById('commission').value) || 0;
+    const currency = document.getElementById('currency').value;
+    const transactionType = document.getElementById('transactionType').value;
+    let exchangeRate = parseFloat(document.getElementById('exchangeRate').value);
+
+    if (quantity <= 0 || unitPrice <= 0) {
+        alert('数量と単価を入力してください');
+        return;
+    }
+
+    // 為替レートが未入力で外貨の場合は取得
+    if (!exchangeRate && currency !== 'JPY') {
+        try {
+            const response = await fetch(`/api/exchange-rate/${currency}?to=JPY`);
+            const result = await response.json();
+            if (result.success && result.data && result.data.rate) {
+                exchangeRate = result.data.rate;
+                document.getElementById('exchangeRate').value = exchangeRate.toFixed(4);
+            } else {
+                alert('為替レートの取得に失敗しました。手動で入力してください。');
+                return;
+            }
+        } catch (error) {
+            alert('為替レートの取得に失敗しました: ' + error.message);
+            return;
+        }
+    }
+
+    // 受渡金額を計算
+    const rate = currency === 'JPY' ? 1 : exchangeRate;
+    const baseAmount = quantity * unitPrice * rate;
+
+    let settlement;
+    if (transactionType === 'BUY') {
+        settlement = Math.round(baseAmount + commission);
+    } else {
+        settlement = Math.round(baseAmount - commission);
+    }
+
+    document.getElementById('settlementAmount').value = settlement;
+}
+
+// 個別入力成功時の表示
+function showManualSuccess(data) {
+    const resultArea = document.getElementById('resultArea');
+    const resultMessage = document.getElementById('resultMessage');
+    const resultList = document.getElementById('resultList');
+    const errorDetails = document.getElementById('errorDetails');
+
+    resultMessage.className = 'alert alert-success';
+    resultMessage.textContent = data.message || '取引を登録しました';
+
+    resultList.innerHTML = `
+        <li>ティッカー: ${data.transaction.ticker_symbol}</li>
+        <li>取引種別: ${data.transaction.transaction_type === 'BUY' ? '買付' : '売却'}</li>
+        <li>数量: ${data.transaction.quantity}</li>
+        <li>受渡金額: ${Number(data.transaction.settlement_amount).toLocaleString()}円</li>
+    `;
+
+    errorDetails.classList.add('d-none');
+    resultArea.classList.remove('d-none');
+}
 
 function showSuccess(data) {
     const resultArea = document.getElementById('resultArea');

@@ -35,7 +35,8 @@ curl http://localhost:8000/api/holdings
 7. [ダッシュボードAPI](#7-ダッシュボードapi)
 8. [損益推移API](#8-損益推移api)
 9. [株式評価指標API](#9-株式評価指標api)
-10. [エラーハンドリング](#10-エラーハンドリング)
+10. [IRR API](#10-irr-api)
+11. [エラーハンドリング](#11-エラーハンドリング)
 
 ---
 
@@ -936,6 +937,104 @@ curl -X POST "http://localhost:5000/api/transactions/delete" \
 
 ---
 
+### 5.5 取引手動登録
+
+個別入力による取引を登録します。
+
+**エンドポイント**: `POST /api/transactions/manual`
+
+**リクエストボディ**:
+```json
+{
+  "transaction_date": "2026-01-15",
+  "transaction_type": "BUY",
+  "ticker_symbol": "AAPL",
+  "security_name": "Apple Inc.",
+  "quantity": 10,
+  "unit_price": 180.50,
+  "settlement_amount": 1805.00,
+  "commission": 0,
+  "currency": "USD",
+  "exchange_rate": 149.50
+}
+```
+
+**パラメータ**:
+- `transaction_date` (required): 取引日（YYYY-MM-DD形式）
+- `transaction_type` (required): 取引種別（"BUY" | "SELL"）
+- `ticker_symbol` (required): ティッカーシンボル
+- `security_name` (optional): 銘柄名
+- `quantity` (required): 数量（正の数値）
+- `unit_price` (required): 単価（正の数値）
+- `settlement_amount` (required): 受渡金額（正の数値）
+- `commission` (optional): 手数料（デフォルト: 0）
+- `currency` (optional): 通貨（デフォルト: ティッカーから推定）
+- `exchange_rate` (optional): 為替レート
+
+**リクエスト例**:
+```bash
+curl -X POST "http://localhost:5000/api/transactions/manual" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transaction_date": "2026-01-15",
+    "transaction_type": "BUY",
+    "ticker_symbol": "9984",
+    "quantity": 100,
+    "unit_price": 8500,
+    "settlement_amount": 850000
+  }'
+```
+
+**成功レスポンス** (201 Created):
+```json
+{
+  "success": true,
+  "message": "取引を登録しました",
+  "transaction": {
+    "transaction_date": "2026-01-15",
+    "ticker_symbol": "9984.T",
+    "security_name": null,
+    "transaction_type": "BUY",
+    "quantity": 100,
+    "unit_price": 8500,
+    "currency": "JPY",
+    "commission": 0,
+    "settlement_amount": 850000
+  }
+}
+```
+
+**エラーレスポンス**:
+
+- 400 Bad Request (バリデーションエラー):
+```json
+{
+  "success": false,
+  "error": "取引種別は'BUY'または'SELL'である必要があります"
+}
+```
+
+- 500 Internal Server Error:
+```json
+{
+  "success": false,
+  "error": "取引の登録に失敗しました: Database error"
+}
+```
+
+**ティッカー自動補完**:
+- 数字のみ（例: "9984"）→ 日本株として ".T" を付与（"9984.T"）
+- サフィックス付き（例: "AAPL", "005930.KS"）→ そのまま使用
+
+**通貨自動推定**:
+- `.T` サフィックス → JPY
+- `.KS`, `.KQ` サフィックス → KRW
+- `.HK` サフィックス → HKD
+- `.L` サフィックス → GBP
+- その他 → USD
+
+---
+
 ## 6. 実現損益API
 
 ### 6.1 実現損益一覧取得
@@ -1553,7 +1652,143 @@ curl -X POST "http://localhost:5000/api/stock-metrics/update-all"
 
 ---
 
-## 10. エラーハンドリング
+## 10. IRR API
+
+### 10.1 全保有銘柄のIRR取得
+
+全保有銘柄のIRR（内部収益率）を取得します。
+
+**エンドポイント**: `GET /api/holdings/irr`
+
+**リクエスト例**:
+```bash
+curl -X GET "http://localhost:5000/api/holdings/irr"
+```
+
+**成功レスポンス** (200 OK):
+```json
+{
+  "success": true,
+  "irr_data": {
+    "AAPL": {
+      "irr": 25.5,
+      "error": null
+    },
+    "9984.T": {
+      "irr": -5.2,
+      "error": null
+    },
+    "INVALID": {
+      "irr": null,
+      "error": "計算に必要なデータが不足しています"
+    }
+  }
+}
+```
+
+**データ説明**:
+- `irr`: 年率換算の内部収益率（%）
+- `error`: エラーがある場合のメッセージ（正常時はnull）
+
+---
+
+### 10.2 特定銘柄のIRR取得
+
+指定した銘柄のIRR詳細を取得します。
+
+**エンドポイント**: `GET /api/holdings/<ticker>/irr`
+
+**URLパラメータ**:
+- `ticker` (required): ティッカーシンボル
+
+**リクエスト例**:
+```bash
+curl -X GET "http://localhost:5000/api/holdings/AAPL/irr"
+```
+
+**成功レスポンス** (200 OK):
+```json
+{
+  "success": true,
+  "ticker": "AAPL",
+  "irr": 25.5,
+  "cash_flows": [
+    {
+      "date": "2024-01-15",
+      "amount": -15000.00,
+      "type": "BUY"
+    },
+    {
+      "date": "2024-06-20",
+      "amount": -5000.00,
+      "type": "BUY"
+    },
+    {
+      "date": "2024-08-15",
+      "amount": 120.00,
+      "type": "DIVIDEND"
+    },
+    {
+      "date": "2026-01-17",
+      "amount": 25500.00,
+      "type": "CURRENT_VALUE"
+    }
+  ],
+  "error": null
+}
+```
+
+**データ説明**:
+- `irr`: 年率換算の内部収益率（%）
+- `cash_flows`: IRR計算に使用したキャッシュフローの詳細
+  - `date`: キャッシュフローの日付
+  - `amount`: 金額（負=支出、正=収入）
+  - `type`: 種別（BUY, SELL, DIVIDEND, CURRENT_VALUE）
+- `error`: エラーがある場合のメッセージ
+
+**エラーレスポンス**:
+
+- 500 Internal Server Error:
+```json
+{
+  "success": false,
+  "error": "IRRの計算に失敗しました: insufficient data"
+}
+```
+
+---
+
+### 10.3 売却済銘柄のIRR取得
+
+売却済み銘柄の実現IRRを取得します。
+
+**エンドポイント**: `GET /api/realized-pnl/irr`
+
+**リクエスト例**:
+```bash
+curl -X GET "http://localhost:5000/api/realized-pnl/irr"
+```
+
+**成功レスポンス** (200 OK):
+```json
+{
+  "success": true,
+  "irr_data": {
+    "MSFT": {
+      "irr": 18.3,
+      "error": null
+    },
+    "TSLA": {
+      "irr": -12.5,
+      "error": null
+    }
+  }
+}
+```
+
+---
+
+## 11. エラーハンドリング
 
 ### エラーレスポンス形式
 
@@ -2009,6 +2244,12 @@ curl -X POST "http://localhost:5000/api/exchange-rate/convert" \
 
 ## 変更履歴
 
+### v1.1 (2026-01-17)
+- IRR API追加（保有銘柄・売却済銘柄のIRR取得）
+- 取引手動登録API追加
+- ティッカー自動補完機能
+- 通貨自動推定機能
+
 ### v1.0 (2026-01-10)
 - 初版リリース
 - 全APIエンドポイントの仕様策定
@@ -2017,6 +2258,6 @@ curl -X POST "http://localhost:5000/api/exchange-rate/convert" \
 
 ---
 
-**ドキュメント作成日**: 2026-01-10
-**API バージョン**: v1.0
+**ドキュメント作成日**: 2026-01-17
+**API バージョン**: v1.1
 **アプリケーション**: Stock P&L Manager

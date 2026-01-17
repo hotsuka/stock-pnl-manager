@@ -7,7 +7,89 @@ from app import db
 from app.models import Transaction, RealizedPnl, Dividend, Holding
 from app.services.exchange_rate_fetcher import ExchangeRateFetcher
 
+
 class PerformanceService:
+    @staticmethod
+    def get_split_adjustment_factor(yf_ticker, from_date, to_date):
+        """
+        指定期間の株式分割による調整係数を取得
+        from_dateの価格をto_dateの分割調整後価格と比較可能にするための係数を返す
+
+        Returns:
+            float: 調整係数（分割があった場合は1より大きい/小さい値）
+                   from_date価格 / 調整係数 = 分割調整後価格
+        """
+        try:
+            ticker = yf.Ticker(yf_ticker)
+            splits = ticker.splits
+
+            if splits.empty:
+                return 1.0
+
+            # 期間内の分割のみを抽出
+            # タイムゾーンを除去してから比較
+            cumulative_ratio = 1.0
+
+            for split_idx, ratio in splits.items():
+                # インデックスからdateオブジェクトを取得
+                if hasattr(split_idx, 'date'):
+                    split_date = split_idx.date()
+                elif hasattr(split_idx, 'to_pydatetime'):
+                    split_date = split_idx.to_pydatetime().date()
+                else:
+                    # 変換できない場合はスキップ
+                    continue
+
+                # 期間内の分割のみを対象
+                if from_date < split_date <= to_date:
+                    cumulative_ratio *= ratio
+
+            return cumulative_ratio
+
+        except Exception as e:
+            print(f"WARNING: Failed to get split data for {yf_ticker}: {e}")
+            return 1.0
+
+    @staticmethod
+    def get_all_split_factors(tickers, start_date, end_date):
+        """
+        複数銘柄の分割調整係数を一括取得（キャッシュ用）
+
+        Returns:
+            dict: {yf_ticker: {date: cumulative_split_ratio}}
+        """
+        split_data = {}
+
+        for ticker in tickers:
+            try:
+                yf_t = f"{ticker}.T" if ticker.isdigit() else ticker
+                t = yf.Ticker(yf_t)
+                splits = t.splits
+
+                if splits.empty:
+                    split_data[yf_t] = {}
+                    continue
+
+                # 日付ごとの累積分割比率を計算
+                cumulative = {}
+                ratio = 1.0
+
+                # 分割日でソート
+                splits_sorted = splits.sort_index()
+
+                for split_date, split_ratio in splits_sorted.items():
+                    split_date_obj = split_date.date() if hasattr(split_date, 'date') else split_date
+                    if start_date <= split_date_obj <= end_date:
+                        ratio *= split_ratio
+                        cumulative[split_date_obj] = ratio
+
+                split_data[yf_t] = cumulative
+
+            except Exception as e:
+                print(f"WARNING: Failed to get split data for {ticker}: {e}")
+                split_data[ticker] = {}
+
+        return split_data
     @staticmethod
     def get_performance_history(days=365):
         """
@@ -351,9 +433,21 @@ class PerformanceService:
                                and month_start <= tx.transaction_date <= month_end]
 
                 if buy_in_month:
-                    # 当月中に取得: 加重平均取得価格を使用
-                    total_cost = sum(float(tx.unit_price) * float(tx.quantity) for tx in buy_in_month)
-                    total_qty = sum(float(tx.quantity) for tx in buy_in_month)
+                    # 当月中に取得: 加重平均取得価格を使用（分割調整後）
+                    # 取得価格は分割調整前なので、分割比率で割る必要がある
+                    # yfinanceはauto_adjust=Trueで今日時点の分割調整価格を返すため、
+                    # 取得価格も今日時点の分割に合わせて調整する
+                    total_cost = 0.0
+                    total_qty = 0.0
+                    for tx in buy_in_month:
+                        # 取引日から今日までの分割調整係数を取得
+                        split_factor = PerformanceService.get_split_adjustment_factor(
+                            yf_t, tx.transaction_date, date.today()
+                        )
+                        # 取得価格を分割調整
+                        adjusted_price = float(tx.unit_price) / split_factor
+                        total_cost += adjusted_price * float(tx.quantity)
+                        total_qty += float(tx.quantity)
                     prev_price = total_cost / total_qty if total_qty > 0 else 0
                 else:
                     # 前月から保有: 前月末価格を使用
@@ -597,20 +691,44 @@ class PerformanceService:
             curr_price = prices_df.iloc[curr_idx][yf_t]
             prev_price = prices_df.iloc[prev_idx][yf_t]
 
-            # 月次の場合、当月中に取得した銘柄は取得価格を使用
+            # 月次の場合、当月に新規取得した銘柄は取得価格を使用
+            # 注意: 前月から保有していて当月に追加購入した場合は前月末株価を使用
+            is_new_this_month = False
             if is_monthly:
-                # 当月中のBUY取引を確認
-                buy_in_month = [tx for tx in transactions
-                               if tx.ticker_symbol == ticker
-                               and tx.transaction_type == 'BUY'
-                               and month_start <= tx.transaction_date <= target_date]
+                # 前月末時点の保有数量を計算
+                holdings_at_prev_month_end = Decimal('0')
+                for tx in transactions:
+                    if tx.ticker_symbol == ticker and tx.transaction_date < month_start:
+                        if tx.transaction_type == 'BUY':
+                            holdings_at_prev_month_end += Decimal(str(tx.quantity))
+                        elif tx.transaction_type == 'SELL':
+                            holdings_at_prev_month_end -= Decimal(str(tx.quantity))
 
-                if buy_in_month:
-                    # 当月中に取得した銘柄: 加重平均取得価格を計算
-                    total_cost = sum(float(tx.unit_price) * float(tx.quantity) for tx in buy_in_month)
-                    total_qty = sum(float(tx.quantity) for tx in buy_in_month)
-                    if total_qty > 0:
-                        prev_price = total_cost / total_qty
+                # 前月末時点で保有がなかった（当月に新規取得した）銘柄のみ取得価格を使用
+                if holdings_at_prev_month_end <= 0:
+                    buy_in_month = [tx for tx in transactions
+                                   if tx.ticker_symbol == ticker
+                                   and tx.transaction_type == 'BUY'
+                                   and month_start <= tx.transaction_date <= target_date]
+
+                    if buy_in_month:
+                        is_new_this_month = True
+                        # 当月に新規取得した銘柄: 加重平均取得価格を計算（分割調整後）
+                        # yfinanceはauto_adjust=Trueで今日時点の分割調整価格を返すため、
+                        # 取得価格も今日時点の分割に合わせて調整する
+                        total_cost = 0.0
+                        total_qty = 0.0
+                        for tx in buy_in_month:
+                            # 取引日から今日までの分割調整係数を取得
+                            split_factor = PerformanceService.get_split_adjustment_factor(
+                                yf_t, tx.transaction_date, date.today()
+                            )
+                            # 取得価格を分割調整
+                            adjusted_price = float(tx.unit_price) / split_factor
+                            total_cost += adjusted_price * float(tx.quantity)
+                            total_qty += float(tx.quantity)
+                        if total_qty > 0:
+                            prev_price = total_cost / total_qty
 
             # curr_priceまたはprev_priceがNaNの場合はスキップ
             if pd.isna(curr_price) or pd.isna(prev_price):
@@ -651,7 +769,8 @@ class PerformanceService:
                 'price_change': price_diff,
                 'currency': currency,
                 'exchange_rate': float(rate),
-                'pnl': round(pnl, 2)
+                'pnl': round(pnl, 2),
+                'is_new_this_month': is_new_this_month
             })
 
         # B. 実現損益の詳細
@@ -1062,3 +1181,324 @@ class PerformanceService:
             'portfolio': portfolio_data,
             'benchmarks': benchmarks_result
         }
+
+    @staticmethod
+    def calculate_irr_for_holding(ticker_symbol):
+        """
+        特定の保有銘柄のIRR（内部収益率）を計算する
+
+        キャッシュフロー:
+        - 買い: マイナス（投資）
+        - 配当: プラス（受取）
+        - 現在評価額: プラス（仮想的な売却）
+
+        Returns:
+            dict: {'irr': float or None, 'cash_flows': list, 'error': str or None}
+        """
+        try:
+            import numpy_financial as npf
+        except ImportError:
+            try:
+                import numpy as np
+                # numpy_financialがない場合はnumpyのnpvを使ってIRRを計算
+                npf = None
+            except ImportError:
+                return {'irr': None, 'cash_flows': [], 'error': 'numpy not available'}
+
+        from datetime import date as date_class
+
+        # 取引履歴を取得
+        transactions = Transaction.query.filter_by(ticker_symbol=ticker_symbol).order_by(
+            Transaction.transaction_date
+        ).all()
+
+        if not transactions:
+            return {'irr': None, 'cash_flows': [], 'error': 'No transactions found'}
+
+        # 配当履歴を取得
+        dividends = Dividend.query.filter_by(ticker_symbol=ticker_symbol).order_by(
+            Dividend.ex_dividend_date
+        ).all()
+
+        # 保有銘柄情報を取得
+        holding = Holding.query.filter_by(ticker_symbol=ticker_symbol).first()
+
+        # キャッシュフローを日付順にまとめる
+        cash_flows = []
+
+        # 取引のキャッシュフロー
+        for tx in transactions:
+            if tx.transaction_type == 'BUY':
+                # 買い: 支払い（マイナス）- settlement_amountは円建て
+                cf_amount = -float(tx.settlement_amount or 0)
+            else:  # SELL
+                # 売り: 受取（プラス）
+                cf_amount = float(tx.settlement_amount or 0)
+
+            cash_flows.append({
+                'date': tx.transaction_date,
+                'amount': cf_amount,
+                'type': tx.transaction_type
+            })
+
+        # 配当のキャッシュフロー（円換算）
+        for div in dividends:
+            if div.total_dividend and div.total_dividend > 0:
+                # 配当は円換算が必要な場合がある
+                div_amount = float(div.total_dividend)
+
+                # 通貨が外貨の場合は為替レートを取得して換算
+                if div.currency and div.currency.upper() not in ['JPY', '日本円']:
+                    try:
+                        rates = ExchangeRateFetcher.get_multiple_rates([div.currency])
+                        if rates and div.currency in rates:
+                            rate = rates[div.currency].get('rate', 1.0)
+                            div_amount = div_amount * rate
+                    except Exception:
+                        pass  # レート取得失敗時はそのまま
+
+                cash_flows.append({
+                    'date': div.ex_dividend_date,
+                    'amount': div_amount,
+                    'type': 'DIVIDEND'
+                })
+
+        # 現在の評価額を最終キャッシュフローとして追加
+        if holding and holding.current_value:
+            current_value = float(holding.current_value)
+            cash_flows.append({
+                'date': date_class.today(),
+                'amount': current_value,
+                'type': 'CURRENT_VALUE'
+            })
+
+        # 日付順でソート
+        cash_flows.sort(key=lambda x: x['date'])
+
+        if len(cash_flows) < 2:
+            return {'irr': None, 'cash_flows': cash_flows, 'error': 'Insufficient cash flows'}
+
+        # XIRRを計算（日付を考慮したIRR）
+        try:
+            irr = PerformanceService._calculate_xirr(cash_flows)
+            return {'irr': irr, 'cash_flows': cash_flows, 'error': None}
+        except Exception as e:
+            return {'irr': None, 'cash_flows': cash_flows, 'error': str(e)}
+
+    @staticmethod
+    def _calculate_xirr(cash_flows, max_iterations=100, tolerance=1e-6):
+        """
+        XIRR（日付を考慮した内部収益率）を計算
+
+        Args:
+            cash_flows: [{'date': date, 'amount': float}, ...]
+            max_iterations: 最大反復回数
+            tolerance: 収束判定の許容誤差
+
+        Returns:
+            float: 年率IRR（%表示）, または None（計算不可）
+        """
+        if not cash_flows or len(cash_flows) < 2:
+            return None
+
+        # 基準日を最初のキャッシュフロー日とする
+        base_date = cash_flows[0]['date']
+
+        # 日数を年数に変換（365日 = 1年）
+        def years_from_base(d):
+            if hasattr(d, 'date'):
+                d = d.date()
+            delta = (d - base_date).days
+            return delta / 365.0
+
+        # XNPV関数
+        def xnpv(rate, cfs):
+            total = 0.0
+            for cf in cfs:
+                t = years_from_base(cf['date'])
+                if rate == -1 and t > 0:
+                    return float('inf')
+                try:
+                    total += cf['amount'] / ((1 + rate) ** t)
+                except (ZeroDivisionError, OverflowError):
+                    return float('inf')
+            return total
+
+        # 符号が変わるか確認（IRRが存在するための必要条件）
+        positive_cf = sum(cf['amount'] for cf in cash_flows if cf['amount'] > 0)
+        negative_cf = sum(cf['amount'] for cf in cash_flows if cf['amount'] < 0)
+
+        if positive_cf <= 0 or negative_cf >= 0:
+            # すべて同符号の場合はIRR計算不可
+            return None
+
+        # ニュートン・ラフソン法でIRRを探索
+        rate = 0.1  # 初期推定値（10%）
+
+        for _ in range(max_iterations):
+            npv = xnpv(rate, cash_flows)
+
+            # 微分（数値微分）
+            h = 0.0001
+            npv_plus = xnpv(rate + h, cash_flows)
+            derivative = (npv_plus - npv) / h
+
+            if abs(derivative) < 1e-10:
+                break
+
+            new_rate = rate - npv / derivative
+
+            # 収束判定
+            if abs(new_rate - rate) < tolerance:
+                # 年率IRRを%で返す
+                return new_rate * 100
+
+            rate = new_rate
+
+            # 範囲制限（-99%から1000%）
+            if rate < -0.99:
+                rate = -0.99
+            elif rate > 10:
+                rate = 10
+
+        # 収束しなかった場合は二分法で再試行
+        low, high = -0.99, 10.0
+
+        for _ in range(100):
+            mid = (low + high) / 2
+            npv = xnpv(mid, cash_flows)
+
+            if abs(npv) < tolerance:
+                return mid * 100
+
+            if xnpv(low, cash_flows) * npv < 0:
+                high = mid
+            else:
+                low = mid
+
+        # それでも収束しない場合
+        return None
+
+    @staticmethod
+    def calculate_irr_for_all_holdings():
+        """
+        すべての保有銘柄のIRRを計算
+
+        Returns:
+            dict: {ticker_symbol: {'irr': float or None, 'error': str or None}}
+        """
+        holdings = Holding.query.all()
+        results = {}
+
+        for holding in holdings:
+            result = PerformanceService.calculate_irr_for_holding(holding.ticker_symbol)
+            results[holding.ticker_symbol] = {
+                'irr': result['irr'],
+                'error': result['error']
+            }
+
+        return results
+
+    @staticmethod
+    def calculate_irr_for_realized(ticker_symbol):
+        """
+        売却済み銘柄のIRR（内部収益率）を計算する
+
+        キャッシュフロー:
+        - 買い: マイナス（投資）
+        - 配当: プラス（受取）- 保有期間中のもの
+        - 売り: プラス（売却代金）
+
+        Returns:
+            dict: {'irr': float or None, 'cash_flows': list, 'error': str or None}
+        """
+        from datetime import date as date_class
+
+        # 取引履歴を取得
+        transactions = Transaction.query.filter_by(ticker_symbol=ticker_symbol).order_by(
+            Transaction.transaction_date
+        ).all()
+
+        if not transactions:
+            return {'irr': None, 'cash_flows': [], 'error': 'No transactions found'}
+
+        # 売却取引があるか確認
+        sell_transactions = [tx for tx in transactions if tx.transaction_type == 'SELL']
+        if not sell_transactions:
+            return {'irr': None, 'cash_flows': [], 'error': 'No sell transactions (not realized)'}
+
+        # 配当履歴を取得
+        dividends = Dividend.query.filter_by(ticker_symbol=ticker_symbol).order_by(
+            Dividend.ex_dividend_date
+        ).all()
+
+        # キャッシュフローを日付順にまとめる
+        cash_flows = []
+
+        # 取引のキャッシュフロー
+        for tx in transactions:
+            if tx.transaction_type == 'BUY':
+                cf_amount = -float(tx.settlement_amount or 0)
+            else:  # SELL
+                cf_amount = float(tx.settlement_amount or 0)
+
+            cash_flows.append({
+                'date': tx.transaction_date,
+                'amount': cf_amount,
+                'type': tx.transaction_type
+            })
+
+        # 配当のキャッシュフロー（円換算）
+        for div in dividends:
+            if div.total_dividend and div.total_dividend > 0:
+                div_amount = float(div.total_dividend)
+
+                if div.currency and div.currency.upper() not in ['JPY', '日本円']:
+                    try:
+                        rates = ExchangeRateFetcher.get_multiple_rates([div.currency])
+                        if rates and div.currency in rates:
+                            rate = rates[div.currency].get('rate', 1.0)
+                            div_amount = div_amount * rate
+                    except Exception:
+                        pass
+
+                cash_flows.append({
+                    'date': div.ex_dividend_date,
+                    'amount': div_amount,
+                    'type': 'DIVIDEND'
+                })
+
+        # 日付順でソート
+        cash_flows.sort(key=lambda x: x['date'])
+
+        if len(cash_flows) < 2:
+            return {'irr': None, 'cash_flows': cash_flows, 'error': 'Insufficient cash flows'}
+
+        # XIRRを計算
+        try:
+            irr = PerformanceService._calculate_xirr(cash_flows)
+            return {'irr': irr, 'cash_flows': cash_flows, 'error': None}
+        except Exception as e:
+            return {'irr': None, 'cash_flows': cash_flows, 'error': str(e)}
+
+    @staticmethod
+    def calculate_irr_for_all_realized():
+        """
+        全ての売却済み銘柄のIRRを計算する
+
+        Returns:
+            dict: {ticker_symbol: {'irr': float or None, 'error': str or None}}
+        """
+        # RealizedPnlテーブルからユニークなティッカーを取得
+        realized_tickers = db.session.query(RealizedPnl.ticker_symbol).distinct().all()
+        ticker_symbols = [t[0] for t in realized_tickers]
+
+        results = {}
+        for ticker in ticker_symbols:
+            result = PerformanceService.calculate_irr_for_realized(ticker)
+            results[ticker] = {
+                'irr': result['irr'],
+                'error': result['error']
+            }
+
+        return results

@@ -335,6 +335,57 @@ def get_holdings():
     })
 
 
+@bp.route('/holdings/irr', methods=['GET'])
+def get_holdings_irr():
+    """Get IRR (Internal Rate of Return) for all holdings"""
+    from app.services.performance_service import PerformanceService
+
+    try:
+        results = PerformanceService.calculate_irr_for_all_holdings()
+
+        return jsonify({
+            'success': True,
+            'irr_data': results
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/holdings/<ticker>/irr', methods=['GET'])
+def get_holding_irr(ticker):
+    """Get IRR for a specific holding"""
+    from app.services.performance_service import PerformanceService
+
+    try:
+        result = PerformanceService.calculate_irr_for_holding(ticker)
+
+        return jsonify({
+            'success': True,
+            'ticker': ticker,
+            'irr': result['irr'],
+            'cash_flows': [
+                {
+                    'date': cf['date'].isoformat() if hasattr(cf['date'], 'isoformat') else str(cf['date']),
+                    'amount': cf['amount'],
+                    'type': cf['type']
+                } for cf in result['cash_flows']
+            ],
+            'error': result['error']
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @bp.route('/holdings/<ticker>', methods=['GET'])
 def get_holding(ticker):
     """Get specific holding details"""
@@ -541,6 +592,103 @@ def update_transaction(transaction_id):
         logger.error(f"取引更新エラー (ID: {transaction_id}): {str(e)}")
         raise DatabaseError(f'取引の更新に失敗しました: {str(e)}')
 
+@bp.route('/transactions/manual', methods=['POST'])
+def create_manual_transaction():
+    """個別入力による取引の登録"""
+    from app.services import TransactionService
+    from datetime import datetime
+
+    try:
+        log_api_call(logger, '/transactions/manual', 'POST')
+
+        data = request.get_json()
+        if not data:
+            raise ValidationError("リクエストボディが空です")
+
+        # 必須フィールドのバリデーション
+        validate_required_fields(data, ['transaction_date', 'transaction_type', 'ticker_symbol', 'quantity', 'unit_price', 'settlement_amount'])
+
+        # 取引種別のバリデーション
+        if data['transaction_type'] not in ['BUY', 'SELL']:
+            raise ValidationError("取引種別は'BUY'または'SELL'である必要があります")
+
+        # 数値のバリデーション
+        validate_positive_number(data['quantity'], '数量')
+        validate_positive_number(data['unit_price'], '単価')
+        validate_positive_number(data['settlement_amount'], '受渡金額')
+
+        # 日付の解析
+        transaction_date = validate_date_format(data['transaction_date'], '取引日')
+
+        # ティッカーシンボルの正規化
+        ticker = data['ticker_symbol'].upper().strip()
+        # 数字のみの場合は日本株として.Tを付ける
+        if ticker.isdigit():
+            ticker = f"{ticker}.T"
+
+        # 通貨の推定（指定がない場合）
+        currency = data.get('currency', 'JPY')
+        if not currency:
+            if ticker.endswith('.T'):
+                currency = 'JPY'
+            elif ticker.endswith('.KS') or ticker.endswith('.KQ'):
+                currency = 'KRW'
+            elif ticker.endswith('.HK'):
+                currency = 'HKD'
+            elif ticker.endswith('.L'):
+                currency = 'GBP'
+            else:
+                currency = 'USD'
+
+        # 取引データを構築（Decimal型を使用してDB型と一致させる）
+        from decimal import Decimal
+        transaction_data = {
+            'transaction_date': transaction_date,
+            'ticker_symbol': ticker,
+            'security_name': data.get('security_name'),
+            'transaction_type': data['transaction_type'],
+            'quantity': Decimal(str(data['quantity'])),
+            'unit_price': Decimal(str(data['unit_price'])),
+            'currency': currency,
+            'commission': Decimal(str(data.get('commission', 0))),
+            'exchange_rate': Decimal(str(data['exchange_rate'])) if data.get('exchange_rate') else None,
+            'settlement_amount': Decimal(str(data['settlement_amount'])),
+            'settlement_currency': 'JPY'
+        }
+
+        # 保存
+        result = TransactionService.save_transactions([transaction_data])
+
+        if result['success'] > 0:
+            log_api_call(logger, '/transactions/manual', 'POST', response_code=201)
+            # レスポンス用にDecimalとdateを変換
+            response_data = {
+                'transaction_date': transaction_date.isoformat(),
+                'ticker_symbol': ticker,
+                'security_name': data.get('security_name'),
+                'transaction_type': data['transaction_type'],
+                'quantity': float(data['quantity']),
+                'unit_price': float(data['unit_price']),
+                'currency': currency,
+                'commission': float(data.get('commission', 0)),
+                'settlement_amount': float(data['settlement_amount'])
+            }
+            return jsonify({
+                'success': True,
+                'message': '取引を登録しました',
+                'transaction': response_data
+            }), 201
+        else:
+            error_msg = result['errors'][0]['error'] if result['errors'] else '取引の登録に失敗しました'
+            raise ValidationError(error_msg)
+
+    except (ValidationError, NotFoundError):
+        raise
+    except Exception as e:
+        logger.error(f"取引登録エラー: {str(e)}")
+        raise DatabaseError(f'取引の登録に失敗しました: {str(e)}')
+
+
 @bp.route('/transactions/delete', methods=['POST'])
 def delete_transactions():
     """Delete multiple transactions by IDs"""
@@ -584,6 +732,57 @@ def delete_transactions():
         return jsonify({
             'success': False,
             'error': f'削除に失敗しました: {str(e)}'
+        }), 500
+
+
+@bp.route('/realized-pnl/irr', methods=['GET'])
+def get_realized_pnl_irr():
+    """Get IRR (Internal Rate of Return) for all realized positions"""
+    from app.services.performance_service import PerformanceService
+
+    try:
+        results = PerformanceService.calculate_irr_for_all_realized()
+
+        return jsonify({
+            'success': True,
+            'irr_data': results
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/realized-pnl/<ticker>/irr', methods=['GET'])
+def get_realized_pnl_ticker_irr(ticker):
+    """Get IRR for a specific realized position"""
+    from app.services.performance_service import PerformanceService
+
+    try:
+        result = PerformanceService.calculate_irr_for_realized(ticker)
+
+        return jsonify({
+            'success': True,
+            'ticker': ticker,
+            'irr': result['irr'],
+            'cash_flows': [
+                {
+                    'date': cf['date'].isoformat() if hasattr(cf['date'], 'isoformat') else str(cf['date']),
+                    'amount': cf['amount'],
+                    'type': cf['type']
+                } for cf in result['cash_flows']
+            ],
+            'error': result['error']
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
 
