@@ -1554,9 +1554,7 @@ def override_stock_price():
             db.session.add(new_price)
             db.session.commit()
 
-            logger.info(
-                f"株価追加: {ticker_symbol} {price_date} {close_price} (新規)"
-            )
+            logger.info(f"株価追加: {ticker_symbol} {price_date} {close_price} (新規)")
 
             return (
                 jsonify(
@@ -1609,9 +1607,7 @@ def get_stock_price_history(ticker):
             .all()
         )
 
-        log_api_call(
-            logger, "/stock-price/history/<ticker>", "GET", response_code=200
-        )
+        log_api_call(logger, "/stock-price/history/<ticker>", "GET", response_code=200)
 
         return jsonify(
             {
