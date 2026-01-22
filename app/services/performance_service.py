@@ -6,11 +6,86 @@ import pandas as pd
 import yfinance as yf
 
 from app import db
-from app.models import Dividend, Holding, RealizedPnl, Transaction
+from app.models import Dividend, Holding, RealizedPnl, StockPrice, Transaction
 from app.services.exchange_rate_fetcher import ExchangeRateFetcher
 
 
 class PerformanceService:
+    @staticmethod
+    def get_cached_prices_as_df(tickers, start_date, end_date):
+        """
+        stock_pricesテーブルからキャッシュされた価格をDataFrame形式で取得する。
+        手動で修正された価格が優先される。
+
+        Args:
+            tickers: yfinance形式のティッカーリスト（例：['1557.T', 'AAPL']）
+            start_date: 開始日
+            end_date: 終了日
+
+        Returns:
+            pd.DataFrame: 日付をインデックス、ティッカーをカラムとする価格DataFrame
+        """
+        cached_prices = (
+            StockPrice.query.filter(
+                StockPrice.ticker_symbol.in_(tickers),
+                StockPrice.price_date >= start_date,
+                StockPrice.price_date <= end_date,
+            )
+            .order_by(StockPrice.price_date)
+            .all()
+        )
+
+        if not cached_prices:
+            return pd.DataFrame()
+
+        # DataFrameに変換
+        data = defaultdict(dict)
+        for p in cached_prices:
+            data[p.ticker_symbol][p.price_date] = float(p.close_price)
+
+        df = pd.DataFrame(data)
+        df.index = pd.to_datetime(df.index)
+        df = df.sort_index()
+
+        return df
+
+    @staticmethod
+    def merge_price_data(cached_df, yf_df, tickers):
+        """
+        キャッシュされた価格とYahoo Financeから取得した価格をマージする。
+        キャッシュされた価格を優先する（手動修正が反映される）。
+
+        Args:
+            cached_df: キャッシュされた価格DataFrame
+            yf_df: Yahoo Financeから取得した価格DataFrame
+            tickers: マージ対象のティッカーリスト
+
+        Returns:
+            pd.DataFrame: マージされた価格DataFrame
+        """
+        if cached_df.empty:
+            return yf_df
+        if yf_df.empty:
+            return cached_df
+
+        # yf_dfをベースにキャッシュ価格で上書き
+        merged_df = yf_df.copy()
+
+        for ticker in tickers:
+            if ticker not in cached_df.columns:
+                continue
+            if ticker not in merged_df.columns:
+                merged_df[ticker] = None
+
+            # キャッシュされた日付の価格で上書き
+            for dt in cached_df.index:
+                if dt in merged_df.index:
+                    cached_price = cached_df.loc[dt, ticker]
+                    if pd.notna(cached_price):
+                        merged_df.loc[dt, ticker] = cached_price
+
+        return merged_df
+
     @staticmethod
     def get_split_adjustment_factor(yf_ticker, from_date, to_date):
         """
@@ -194,6 +269,18 @@ class PerformanceService:
         # 全ての DataFrame を横に結合
         prices_df = pd.concat(all_data_frames, axis=1)
         prices_df = prices_df.loc[:, ~prices_df.columns.duplicated()]  # 重複排除
+
+        # キャッシュされた価格をマージ（手動修正を優先）
+        stock_tickers = [t for t in yf_tickers if not t.endswith("=X")]
+        cached_df = PerformanceService.get_cached_prices_as_df(
+            stock_tickers, download_start, end_date
+        )
+        if not cached_df.empty:
+            prices_df = PerformanceService.merge_price_data(
+                cached_df, prices_df, stock_tickers
+            )
+            print(f"DEBUG: Merged {len(cached_df)} cached prices")
+
         prices_df = prices_df.ffill()  # 欠損値を埋める
 
         print(f"DEBUG: Prices DataFrame Shape: {prices_df.shape}")
@@ -398,6 +485,17 @@ class PerformanceService:
 
         prices_df = pd.concat(all_data_frames, axis=1)
         prices_df = prices_df.loc[:, ~prices_df.columns.duplicated()]
+
+        # キャッシュされた価格をマージ（手動修正を優先）
+        stock_tickers = [t for t in yf_tickers if not t.endswith("=X")]
+        cached_df = PerformanceService.get_cached_prices_as_df(
+            stock_tickers, start_date, end_date
+        )
+        if not cached_df.empty:
+            prices_df = PerformanceService.merge_price_data(
+                cached_df, prices_df, stock_tickers
+            )
+
         prices_df = prices_df.ffill()
 
         # 取引履歴をマップ化
@@ -733,6 +831,17 @@ class PerformanceService:
 
         prices_df = pd.concat(all_data_frames, axis=1)
         prices_df = prices_df.loc[:, ~prices_df.columns.duplicated()]
+
+        # キャッシュされた価格をマージ（手動修正を優先）
+        stock_tickers = [t for t in yf_tickers if not t.endswith("=X")]
+        cached_df = PerformanceService.get_cached_prices_as_df(
+            stock_tickers, start_date, end_date
+        )
+        if not cached_df.empty:
+            prices_df = PerformanceService.merge_price_data(
+                cached_df, prices_df, stock_tickers
+            )
+
         prices_df = prices_df.ffill()
 
         # 指定日時点の保有状況を計算

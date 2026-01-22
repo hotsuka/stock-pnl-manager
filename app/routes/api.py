@@ -4,7 +4,7 @@ API endpoints for data operations
 
 from flask import Blueprint, current_app, jsonify, request
 
-from app.models import Dividend, Holding, RealizedPnl, Transaction
+from app.models import Dividend, Holding, RealizedPnl, StockPrice, Transaction
 from app.services import (
     DividendFetcher,
     ExchangeRateFetcher,
@@ -1473,6 +1473,212 @@ def update_all_stock_metrics():
     except Exception as e:
         logger.error(f"評価指標一括更新エラー: {str(e)}")
         raise ExternalAPIError(f"評価指標の一括更新中にエラーが発生しました: {str(e)}")
+
+
+@bp.route("/stock-price/override", methods=["POST"])
+def override_stock_price():
+    """株価データを手動で修正する（Yahoo Financeの誤データ対応）"""
+    from datetime import datetime
+
+    from app import db
+
+    try:
+        log_api_call(logger, "/stock-price/override", "POST")
+
+        data = request.get_json()
+        if not data:
+            raise ValidationError("リクエストボディが空です")
+
+        # 必須フィールドのバリデーション
+        validate_required_fields(data, ["ticker_symbol", "price_date", "close_price"])
+
+        ticker_symbol = data["ticker_symbol"].upper().strip()
+        # 数字のみの場合は日本株として.Tを付ける
+        if ticker_symbol.isdigit():
+            ticker_symbol = f"{ticker_symbol}.T"
+
+        price_date = validate_date_format(data["price_date"], "価格日")
+        close_price = data["close_price"]
+
+        # 価格のバリデーション
+        validate_positive_number(close_price, "終値")
+
+        # 通貨（オプション、デフォルトはティッカーから推定）
+        currency = data.get("currency")
+        if not currency:
+            if ticker_symbol.endswith(".T"):
+                currency = "JPY"
+            elif ticker_symbol.endswith(".KS") or ticker_symbol.endswith(".KQ"):
+                currency = "KRW"
+            else:
+                currency = "USD"
+
+        # 既存レコードを検索
+        existing = StockPrice.query.filter_by(
+            ticker_symbol=ticker_symbol, price_date=price_date
+        ).first()
+
+        if existing:
+            # 既存レコードを更新
+            old_price = float(existing.close_price)
+            existing.close_price = close_price
+            existing.currency = currency
+            db.session.commit()
+
+            logger.info(
+                f"株価修正: {ticker_symbol} {price_date} {old_price} -> {close_price}"
+            )
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"{ticker_symbol} の {price_date} の株価を修正しました",
+                    "action": "updated",
+                    "data": {
+                        "ticker_symbol": ticker_symbol,
+                        "price_date": price_date.isoformat(),
+                        "old_price": old_price,
+                        "new_price": float(close_price),
+                        "currency": currency,
+                    },
+                }
+            )
+        else:
+            # 新規レコードを作成
+            new_price = StockPrice(
+                ticker_symbol=ticker_symbol,
+                price_date=price_date,
+                close_price=close_price,
+                currency=currency,
+            )
+            db.session.add(new_price)
+            db.session.commit()
+
+            logger.info(
+                f"株価追加: {ticker_symbol} {price_date} {close_price} (新規)"
+            )
+
+            return (
+                jsonify(
+                    {
+                        "success": True,
+                        "message": f"{ticker_symbol} の {price_date} の株価を追加しました",
+                        "action": "created",
+                        "data": {
+                            "ticker_symbol": ticker_symbol,
+                            "price_date": price_date.isoformat(),
+                            "close_price": float(close_price),
+                            "currency": currency,
+                        },
+                    }
+                ),
+                201,
+            )
+
+    except (ValidationError, NotFoundError):
+        raise
+    except Exception as e:
+        logger.error(f"株価修正エラー: {str(e)}")
+        raise DatabaseError(f"株価の修正に失敗しました: {str(e)}")
+
+
+@bp.route("/stock-price/history/<ticker>", methods=["GET"])
+def get_stock_price_history(ticker):
+    """特定銘柄の株価履歴を取得"""
+    try:
+        log_api_call(logger, "/stock-price/history/<ticker>", "GET", {"ticker": ticker})
+
+        # ティッカーシンボルの正規化
+        ticker_symbol = ticker.upper().strip()
+        if ticker_symbol.isdigit():
+            ticker_symbol = f"{ticker_symbol}.T"
+
+        # 期間のパラメータ（オプション）
+        days = request.args.get("days", type=int, default=30)
+
+        from datetime import datetime, timedelta
+
+        start_date = datetime.now().date() - timedelta(days=days)
+
+        prices = (
+            StockPrice.query.filter(
+                StockPrice.ticker_symbol == ticker_symbol,
+                StockPrice.price_date >= start_date,
+            )
+            .order_by(StockPrice.price_date.desc())
+            .all()
+        )
+
+        log_api_call(
+            logger, "/stock-price/history/<ticker>", "GET", response_code=200
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "ticker": ticker_symbol,
+                "count": len(prices),
+                "prices": [p.to_dict() for p in prices],
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"株価履歴取得エラー ({ticker}): {str(e)}")
+        raise DatabaseError(f"株価履歴の取得に失敗しました: {str(e)}")
+
+
+@bp.route("/stock-price/override/<ticker>/<date>", methods=["DELETE"])
+def delete_stock_price_override(ticker, date):
+    """手動で追加/修正した株価を削除"""
+    from app import db
+
+    try:
+        log_api_call(
+            logger,
+            "/stock-price/override/<ticker>/<date>",
+            "DELETE",
+            {"ticker": ticker, "date": date},
+        )
+
+        # ティッカーシンボルの正規化
+        ticker_symbol = ticker.upper().strip()
+        if ticker_symbol.isdigit():
+            ticker_symbol = f"{ticker_symbol}.T"
+
+        price_date = validate_date_format(date, "価格日")
+
+        existing = StockPrice.query.filter_by(
+            ticker_symbol=ticker_symbol, price_date=price_date
+        ).first()
+
+        if not existing:
+            raise NotFoundError(
+                f"株価データが見つかりません: {ticker_symbol} {price_date}"
+            )
+
+        deleted_price = float(existing.close_price)
+        db.session.delete(existing)
+        db.session.commit()
+
+        logger.info(f"株価削除: {ticker_symbol} {price_date} {deleted_price}")
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"{ticker_symbol} の {price_date} の株価を削除しました",
+                "data": {
+                    "ticker_symbol": ticker_symbol,
+                    "price_date": price_date.isoformat(),
+                    "deleted_price": deleted_price,
+                },
+            }
+        )
+
+    except (ValidationError, NotFoundError):
+        raise
+    except Exception as e:
+        logger.error(f"株価削除エラー: {str(e)}")
+        raise DatabaseError(f"株価の削除に失敗しました: {str(e)}")
 
 
 @bp.route("/health", methods=["GET"])

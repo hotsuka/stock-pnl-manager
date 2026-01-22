@@ -50,3 +50,9 @@ def performance():
 def test_performance():
     """Performance API Test page"""
     return render_template("test_performance.html")
+
+
+@bp.route("/price-override")
+def price_override():
+    """Stock Price Override page"""
+    return render_template("price_override.html")

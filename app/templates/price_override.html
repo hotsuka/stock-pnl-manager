@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block title %}株価修正 - Stock P&L Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card {
+        margin-bottom: 20px;
+    }
+    .price-history-table {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .price-history-table th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 1;
+    }
+    .text-positive {
+        color: #28a745;
+    }
+    .text-negative {
+        color: #dc3545;
+    }
+    .btn-delete {
+        padding: 2px 8px;
+        font-size: 0.8rem;
+    }
+    .yf-error {
+        background-color: #fff3cd;
+    }
+    .manual-override {
+        background-color: #d1ecf1;
+    }
+    .info-box {
+        background-color: #e7f3ff;
+        border-left: 4px solid #0d6efd;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-10 offset-md-1">
+        <h2>株価修正</h2>
+        <hr>
+
+        <div class="info-box">
+            <h6><i class="bi bi-info-circle"></i> この機能について</h6>
+            <p class="mb-0">
+                Yahoo Financeから取得した株価データに誤りがある場合、正しい値に手動で修正できます。<br>
+                修正した値は損益推移の計算に優先的に使用されます。
+            </p>
+        </div>
+
+        <!-- 株価修正フォーム -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pencil-square"></i> 株価を修正</h5>
+            </div>
+            <div class="card-body">
+                <form id="priceOverrideForm">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="tickerSymbol" class="form-label">ティッカーシンボル <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="tickerSymbol" placeholder="例: 1557, AAPL" required>
+                                <div class="form-text">
+                                    日本株は数字のみ（自動で.Tが付きます）
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="priceDate" class="form-label">日付 <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="priceDate" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="closePrice" class="form-label">終値 <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="closePrice" step="0.0001" min="0" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="currency" class="form-label">通貨</label>
+                                <select class="form-select" id="currency">
+                                    <option value="">自動判定</option>
+                                    <option value="JPY">JPY (日本円)</option>
+                                    <option value="USD">USD (米ドル)</option>
+                                    <option value="KRW">KRW (韓国ウォン)</option>
+                                </select>
+                                <div class="form-text">空欄の場合はティッカーから自動判定</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span class="spinner-border spinner-border-sm d-none" id="submitSpinner"></span>
+                        <i class="bi bi-check-lg"></i> 株価を修正
+                    </button>
+                    <button type="button" class="btn btn-secondary ms-2" onclick="fetchYahooPrice()">
+                        <i class="bi bi-arrow-repeat"></i> Yahoo価格を確認
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 結果表示エリア -->
+        <div id="resultArea" class="alert d-none" role="alert"></div>
+
+        <!-- 株価履歴検索 -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-search"></i> 株価履歴を確認</h5>
+            </div>
+            <div class="card-body">
+                <form id="historySearchForm" class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="searchTicker" class="form-label">ティッカーシンボル</label>
+                        <input type="text" class="form-control" id="searchTicker" placeholder="例: 1557">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="searchDays" class="form-label">期間</label>
+                        <select class="form-select" id="searchDays">
+                            <option value="7">過去7日</option>
+                            <option value="30" selected>過去30日</option>
+                            <option value="90">過去90日</option>
+                            <option value="365">過去1年</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-search"></i> 検索
+                        </button>
+                    </div>
+                </form>
+
+                <!-- 履歴表示エリア -->
+                <div id="historyArea" class="mt-4 d-none">
+                    <h6 id="historyTitle"></h6>
+                    <div class="price-history-table">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>日付</th>
+                                    <th class="text-end">終値</th>
+                                    <th>通貨</th>
+                                    <th>登録日時</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="noHistoryMessage" class="text-muted text-center py-3 d-none">
+                        該当するデータがありません
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Yahoo Finance価格との比較 -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Yahoo Finance価格との比較</h5>
+            </div>
+            <div class="card-body">
+                <form id="compareForm" class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="compareTicker" class="form-label">ティッカーシンボル</label>
+                        <input type="text" class="form-control" id="compareTicker" placeholder="例: 1557">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-arrow-repeat"></i> 比較
+                        </button>
+                    </div>
+                </form>
+
+                <div id="compareArea" class="mt-4 d-none">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>日付</th>
+                                    <th class="text-end">Yahoo Finance</th>
+                                    <th class="text-end">キャッシュ値</th>
+                                    <th class="text-end">差額</th>
+                                    <th>ステータス</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compareTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 初期化
+document.addEventListener('DOMContentLoaded', function() {
+    // 今日の日付をデフォルトに設定
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('priceDate').value = today;
+
+    // ティッカー変更時に通貨を自動設定
+    document.getElementById('tickerSymbol').addEventListener('blur', function() {
+        const ticker = this.value.toUpperCase();
+        const currencySelect = document.getElementById('currency');
+
+        if (ticker.endsWith('.T') || /^\d+$/.test(ticker)) {
+            currencySelect.value = 'JPY';
+        } else if (ticker.endsWith('.KS') || ticker.endsWith('.KQ')) {
+            currencySelect.value = 'KRW';
+        } else if (!ticker.includes('.')) {
+            currencySelect.value = 'USD';
+        }
+    });
+});
+
+// 株価修正フォーム送信
+document.getElementById('priceOverrideForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const btn = document.getElementById('submitBtn');
+    const spinner = document.getElementById('submitSpinner');
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+
+    const resultArea = document.getElementById('resultArea');
+    resultArea.classList.add('d-none');
+
+    try {
+        const data = {
+            ticker_symbol: document.getElementById('tickerSymbol').value.toUpperCase(),
+            price_date: document.getElementById('priceDate').value,
+            close_price: parseFloat(document.getElementById('closePrice').value),
+            currency: document.getElementById('currency').value || null
+        };
+
+        const response = await fetch('/api/stock-price/override', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            resultArea.className = 'alert alert-success';
+            if (result.action === 'updated') {
+                resultArea.innerHTML = `
+                    <strong>株価を修正しました</strong><br>
+                    ${result.data.ticker_symbol} (${result.data.price_date}):
+                    ${formatPrice(result.data.old_price)} → <strong>${formatPrice(result.data.new_price)}</strong>
+                `;
+            } else {
+                resultArea.innerHTML = `
+                    <strong>株価を追加しました</strong><br>
+                    ${result.data.ticker_symbol} (${result.data.price_date}): ${formatPrice(result.data.close_price)}
+                `;
+            }
+
+            // 履歴を自動更新
+            const searchTicker = document.getElementById('searchTicker');
+            if (searchTicker.value) {
+                document.getElementById('historySearchForm').dispatchEvent(new Event('submit'));
+            }
+        } else {
+            resultArea.className = 'alert alert-danger';
+            resultArea.textContent = result.error || '株価の修正に失敗しました';
+        }
+    } catch (error) {
+        resultArea.className = 'alert alert-danger';
+        resultArea.textContent = '通信エラーが発生しました: ' + error.message;
+    } finally {
+        btn.disabled = false;
+        spinner.classList.add('d-none');
+        resultArea.classList.remove('d-none');
+    }
+});
+
+// Yahoo価格を確認
+async function fetchYahooPrice() {
+    const ticker = document.getElementById('tickerSymbol').value.toUpperCase();
+    const date = document.getElementById('priceDate').value;
+
+    if (!ticker) {
+        alert('ティッカーシンボルを入力してください');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/stock-price/${ticker}?cache=false`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+            const price = result.data.current_price || result.data.price;
+            alert(`Yahoo Financeの現在価格: ${formatPrice(price)}\n\n注: 指定日(${date})の価格ではなく、最新の価格です。`);
+        } else {
+            alert('価格を取得できませんでした');
+        }
+    } catch (error) {
+        alert('エラー: ' + error.message);
+    }
+}
+
+// 株価履歴検索
+document.getElementById('historySearchForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const ticker = document.getElementById('searchTicker').value;
+    const days = document.getElementById('searchDays').value;
+
+    if (!ticker) {
+        alert('ティッカーシンボルを入力してください');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/stock-price/history/${ticker}?days=${days}`);
+        const result = await response.json();
+
+        const historyArea = document.getElementById('historyArea');
+        const historyTitle = document.getElementById('historyTitle');
+        const tableBody = document.getElementById('historyTableBody');
+        const noDataMsg = document.getElementById('noHistoryMessage');
+
+        historyTitle.textContent = `${result.ticker} の株価履歴（${result.count}件）`;
+        historyArea.classList.remove('d-none');
+
+        if (result.prices && result.prices.length > 0) {
+            tableBody.innerHTML = result.prices.map(p => `
+                <tr>
+                    <td>${p.price_date}</td>
+                    <td class="text-end">${formatPrice(p.close_price)}</td>
+                    <td>${p.currency || '-'}</td>
+                    <td><small class="text-muted">${formatDateTime(p.created_at)}</small></td>
+                    <td>
+                        <button class="btn btn-outline-danger btn-delete"
+                                onclick="deletePrice('${result.ticker}', '${p.price_date}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button class="btn btn-outline-primary btn-delete ms-1"
+                                onclick="editPrice('${result.ticker}', '${p.price_date}', ${p.close_price})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            noDataMsg.classList.add('d-none');
+        } else {
+            tableBody.innerHTML = '';
+            noDataMsg.classList.remove('d-none');
+        }
+    } catch (error) {
+        alert('エラー: ' + error.message);
+    }
+});
+
+// 株価削除
+async function deletePrice(ticker, date) {
+    if (!confirm(`${ticker} の ${date} の株価を削除しますか？\n削除すると、次回計算時にYahoo Financeの値が使用されます。`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/stock-price/override/${ticker}/${date}`, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert('削除しました');
+            // 履歴を再読み込み
+            document.getElementById('historySearchForm').dispatchEvent(new Event('submit'));
+        } else {
+            alert(result.error || '削除に失敗しました');
+        }
+    } catch (error) {
+        alert('エラー: ' + error.message);
+    }
+}
+
+// 編集用にフォームに値をセット
+function editPrice(ticker, date, price) {
+    document.getElementById('tickerSymbol').value = ticker;
+    document.getElementById('priceDate').value = date;
+    document.getElementById('closePrice').value = price;
+
+    // フォームまでスクロール
+    document.getElementById('priceOverrideForm').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Yahoo Finance価格との比較
+document.getElementById('compareForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const ticker = document.getElementById('compareTicker').value;
+    if (!ticker) {
+        alert('ティッカーシンボルを入力してください');
+        return;
+    }
+
+    // この機能は現在のAPIでは直接比較ができないため、
+    // キャッシュ履歴のみ表示する簡易版として実装
+    document.getElementById('searchTicker').value = ticker;
+    document.getElementById('historySearchForm').dispatchEvent(new Event('submit'));
+
+    document.getElementById('compareArea').classList.add('d-none');
+    alert('キャッシュされた株価履歴を上に表示しました。\nYahoo Financeとの詳細な比較は、パフォーマンス画面で確認できます。');
+});
+
+// ユーティリティ関数
+function formatPrice(price) {
+    if (price === null || price === undefined) return '-';
+    return Number(price).toLocaleString('ja-JP', { maximumFractionDigits: 2 });
+}
+
+function formatDateTime(dateTimeStr) {
+    if (!dateTimeStr) return '-';
+    const dt = new Date(dateTimeStr);
+    return dt.toLocaleString('ja-JP');
+}
+</script>
+{% endblock %}
