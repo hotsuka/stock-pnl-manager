@@ -1825,3 +1825,274 @@ class PerformanceService:
             results[ticker] = {"irr": result["irr"], "error": result["error"]}
 
         return results
+
+    @staticmethod
+    def calculate_portfolio_irr_for_holdings(filter_type="all"):
+        """
+        保有銘柄ポートフォリオ全体のIRR（内部収益率）を計算する
+
+        全銘柄のキャッシュフローを統合してXIRRを計算する。
+
+        Args:
+            filter_type: 'all', 'jp'（日本株のみ）, 'foreign'（外国株のみ）
+
+        Returns:
+            dict: {'irr': float or None, 'cash_flows': list, 'error': str or None}
+        """
+        from datetime import date as date_class
+
+        # 保有銘柄を取得
+        holdings = Holding.query.all()
+
+        # フィルタリング
+        if filter_type == "jp":
+            holdings = [h for h in holdings if h.ticker_symbol.endswith(".T")]
+        elif filter_type == "foreign":
+            holdings = [h for h in holdings if not h.ticker_symbol.endswith(".T")]
+
+        if not holdings:
+            return {"irr": None, "cash_flows": [], "error": "No holdings found"}
+
+        ticker_symbols = [h.ticker_symbol for h in holdings]
+
+        # 全銘柄の取引履歴を取得
+        transactions = (
+            Transaction.query.filter(Transaction.ticker_symbol.in_(ticker_symbols))
+            .order_by(Transaction.transaction_date)
+            .all()
+        )
+
+        if not transactions:
+            return {"irr": None, "cash_flows": [], "error": "No transactions found"}
+
+        # 全銘柄の配当履歴を取得
+        dividends = (
+            Dividend.query.filter(Dividend.ticker_symbol.in_(ticker_symbols))
+            .order_by(Dividend.ex_dividend_date)
+            .all()
+        )
+
+        # キャッシュフローを構築
+        cash_flows = []
+
+        # 取引をキャッシュフローに変換
+        for tx in transactions:
+            if tx.transaction_type == "BUY":
+                # 買い = 投資（マイナス）- settlement_amountは受渡金額（円建て）
+                amount = -(float(tx.settlement_amount) if tx.settlement_amount else 0)
+                if amount != 0:
+                    cash_flows.append(
+                        {
+                            "date": tx.transaction_date,
+                            "amount": amount,
+                            "description": f"BUY {tx.ticker_symbol}",
+                        }
+                    )
+            elif tx.transaction_type == "SELL":
+                # 売り = 回収（プラス）
+                amount = float(tx.settlement_amount) if tx.settlement_amount else 0
+                if amount != 0:
+                    cash_flows.append(
+                        {
+                            "date": tx.transaction_date,
+                            "amount": amount,
+                            "description": f"SELL {tx.ticker_symbol}",
+                        }
+                    )
+
+        # 配当をキャッシュフローに追加（外貨の場合は為替換算）
+        for div in dividends:
+            if div.total_dividend and div.total_dividend > 0:
+                div_amount = float(div.total_dividend)
+
+                # 通貨が外貨の場合は為替レートを取得して換算
+                if div.currency and div.currency.upper() not in ["JPY", "日本円"]:
+                    try:
+                        rates = ExchangeRateFetcher.get_multiple_rates([div.currency])
+                        if rates and div.currency in rates:
+                            rate = rates[div.currency].get("rate", 1.0)
+                            div_amount = div_amount * rate
+                    except Exception:
+                        pass  # レート取得失敗時はそのまま
+
+                cash_flows.append(
+                    {
+                        "date": div.ex_dividend_date,
+                        "amount": div_amount,
+                        "description": f"DIV {div.ticker_symbol}",
+                    }
+                )
+
+        # 現在の評価額を最終キャッシュフローとして追加（仮想的な売却）
+        today = date_class.today()
+        total_current_value = 0
+
+        for holding in holdings:
+            if holding.current_value:
+                total_current_value += float(holding.current_value)
+
+        if total_current_value > 0:
+            cash_flows.append(
+                {
+                    "date": today,
+                    "amount": total_current_value,
+                    "description": "Current portfolio value",
+                }
+            )
+
+        # 日付順でソート
+        cash_flows.sort(key=lambda x: x["date"])
+
+        if len(cash_flows) < 2:
+            return {
+                "irr": None,
+                "cash_flows": cash_flows,
+                "error": "Insufficient cash flows",
+            }
+
+        # XIRRを計算
+        try:
+            irr = PerformanceService._calculate_xirr(cash_flows)
+            return {"irr": irr, "cash_flows": cash_flows, "error": None}
+        except Exception as e:
+            return {"irr": None, "cash_flows": cash_flows, "error": str(e)}
+
+    @staticmethod
+    def calculate_portfolio_irr_for_realized(filter_type="all"):
+        """
+        売却済み銘柄ポートフォリオ全体のIRR（内部収益率）を計算する
+
+        全売却済み銘柄のキャッシュフローを統合してXIRRを計算する。
+
+        Args:
+            filter_type: 'all', 'jp'（日本株のみ）, 'foreign'（外国株のみ）
+
+        Returns:
+            dict: {'irr': float or None, 'cash_flows': list, 'error': str or None}
+        """
+        from datetime import date as date_class
+
+        # 売却済み銘柄のユニークなティッカーを取得
+        realized_tickers = db.session.query(RealizedPnl.ticker_symbol).distinct().all()
+        ticker_symbols = [t[0] for t in realized_tickers]
+
+        # フィルタリング
+        if filter_type == "jp":
+            ticker_symbols = [t for t in ticker_symbols if t.endswith(".T")]
+        elif filter_type == "foreign":
+            ticker_symbols = [t for t in ticker_symbols if not t.endswith(".T")]
+
+        if not ticker_symbols:
+            return {
+                "irr": None,
+                "cash_flows": [],
+                "error": "No realized holdings found",
+            }
+
+        # 全銘柄の取引履歴を取得
+        transactions = (
+            Transaction.query.filter(Transaction.ticker_symbol.in_(ticker_symbols))
+            .order_by(Transaction.transaction_date)
+            .all()
+        )
+
+        if not transactions:
+            return {"irr": None, "cash_flows": [], "error": "No transactions found"}
+
+        # 売却済み銘柄の保有期間を特定（最初の買いから最後の売りまで）
+        holding_periods = {}
+        for ticker in ticker_symbols:
+            ticker_txs = [t for t in transactions if t.ticker_symbol == ticker]
+            buy_dates = [
+                t.transaction_date for t in ticker_txs if t.transaction_type == "BUY"
+            ]
+            sell_dates = [
+                t.transaction_date for t in ticker_txs if t.transaction_type == "SELL"
+            ]
+            if buy_dates and sell_dates:
+                holding_periods[ticker] = {
+                    "start": min(buy_dates),
+                    "end": max(sell_dates),
+                }
+
+        # 保有期間中の配当を取得
+        dividends = []
+        for ticker, period in holding_periods.items():
+            ticker_divs = (
+                Dividend.query.filter(
+                    Dividend.ticker_symbol == ticker,
+                    Dividend.ex_dividend_date >= period["start"],
+                    Dividend.ex_dividend_date <= period["end"],
+                )
+                .order_by(Dividend.ex_dividend_date)
+                .all()
+            )
+            dividends.extend(ticker_divs)
+
+        # キャッシュフローを構築
+        cash_flows = []
+
+        # 取引をキャッシュフローに変換
+        for tx in transactions:
+            if tx.transaction_type == "BUY":
+                # 買い = 投資（マイナス）- settlement_amountは受渡金額（円建て）
+                amount = -(float(tx.settlement_amount) if tx.settlement_amount else 0)
+                if amount != 0:
+                    cash_flows.append(
+                        {
+                            "date": tx.transaction_date,
+                            "amount": amount,
+                            "description": f"BUY {tx.ticker_symbol}",
+                        }
+                    )
+            elif tx.transaction_type == "SELL":
+                # 売り = 回収（プラス）
+                amount = float(tx.settlement_amount) if tx.settlement_amount else 0
+                if amount != 0:
+                    cash_flows.append(
+                        {
+                            "date": tx.transaction_date,
+                            "amount": amount,
+                            "description": f"SELL {tx.ticker_symbol}",
+                        }
+                    )
+
+        # 配当をキャッシュフローに追加（外貨の場合は為替換算）
+        for div in dividends:
+            if div.total_dividend and div.total_dividend > 0:
+                div_amount = float(div.total_dividend)
+
+                # 通貨が外貨の場合は為替レートを取得して換算
+                if div.currency and div.currency.upper() not in ["JPY", "日本円"]:
+                    try:
+                        rates = ExchangeRateFetcher.get_multiple_rates([div.currency])
+                        if rates and div.currency in rates:
+                            rate = rates[div.currency].get("rate", 1.0)
+                            div_amount = div_amount * rate
+                    except Exception:
+                        pass  # レート取得失敗時はそのまま
+
+                cash_flows.append(
+                    {
+                        "date": div.ex_dividend_date,
+                        "amount": div_amount,
+                        "description": f"DIV {div.ticker_symbol}",
+                    }
+                )
+
+        # 日付順でソート
+        cash_flows.sort(key=lambda x: x["date"])
+
+        if len(cash_flows) < 2:
+            return {
+                "irr": None,
+                "cash_flows": cash_flows,
+                "error": "Insufficient cash flows",
+            }
+
+        # XIRRを計算
+        try:
+            irr = PerformanceService._calculate_xirr(cash_flows)
+            return {"irr": irr, "cash_flows": cash_flows, "error": None}
+        except Exception as e:
+            return {"irr": None, "cash_flows": cash_flows, "error": str(e)}

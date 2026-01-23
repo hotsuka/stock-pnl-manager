@@ -141,6 +141,8 @@
     let irrData = {};
     // フィルター状態
     let currentFilter = 'all'; // 'all', 'jp', 'foreign'
+    // ポートフォリオIRR
+    let portfolioIrr = null;
 
     // ページ読み込み時にデータ取得
     document.addEventListener('DOMContentLoaded', function () {
@@ -152,6 +154,27 @@
         await loadExchangeRates();
         await loadRealizedPnlTable();
         await loadIrrData();
+        await loadPortfolioIrr();
+    }
+
+    // ポートフォリオIRRを取得
+    async function loadPortfolioIrr() {
+        try {
+            const response = await fetch(`/api/realized-pnl/portfolio-irr?filter=${currentFilter}`);
+            const result = await response.json();
+
+            if (result.success) {
+                portfolioIrr = result.irr;
+                // テーブルを再描画してIRRを反映
+                renderRealizedPnlTable();
+            } else {
+                console.error('ポートフォリオIRR取得エラー:', result.error);
+                portfolioIrr = null;
+            }
+        } catch (error) {
+            console.error('ポートフォリオIRR取得エラー:', error);
+            portfolioIrr = null;
+        }
     }
 
     // IRRデータの読み込み
@@ -207,7 +230,7 @@
     }
 
     // フィルターを設定
-    function setFilter(filter) {
+    async function setFilter(filter) {
         currentFilter = filter;
 
         // ボタンの状態を更新
@@ -215,6 +238,9 @@
             btn.classList.remove('active');
         });
         document.getElementById(`filter-${filter}`).classList.add('active');
+
+        // ポートフォリオIRRを取得
+        await loadPortfolioIrr();
 
         // テーブルを再描画
         renderRealizedPnlTable();
@@ -249,19 +275,11 @@
         let totalCost = 0;
         let totalProceeds = 0;
         let totalPnl = 0;
-        let irrSum = 0;
-        let irrCount = 0;
 
         const rows = data.map(r => {
             totalCost += r.total_cost || 0;
             totalProceeds += r.sale_proceeds || 0;
             totalPnl += r.realized_pnl || 0;
-
-            // IRR集計
-            if (r.irr !== null && r.irr !== undefined) {
-                irrSum += r.irr;
-                irrCount++;
-            }
 
             const pnlClass = r.realized_pnl >= 0 ? 'text-success' : 'text-danger';
             const pnlPctClass = r.realized_pnl_pct >= 0 ? 'text-success' : 'text-danger';
@@ -306,21 +324,20 @@
         const totalPnlClass = totalPnl >= 0 ? 'text-success' : 'text-danger';
         const totalPnlPctClass = totalPnlPct >= 0 ? 'text-success' : 'text-danger';
 
-        // IRR平均
-        const avgIrr = irrCount > 0 ? irrSum / irrCount : null;
-        let avgIrrDisplay = '-';
-        let avgIrrClass = '';
-        if (avgIrr !== null) {
-            avgIrrClass = avgIrr >= 0 ? 'text-success' : 'text-danger';
-            const sign = avgIrr >= 0 ? '+' : '';
-            avgIrrDisplay = `${sign}${avgIrr.toFixed(2)}%`;
+        // ポートフォリオIRR（全キャッシュフローから計算）
+        let portfolioIrrDisplay = '-';
+        let portfolioIrrClass = '';
+        if (portfolioIrr !== null) {
+            portfolioIrrClass = portfolioIrr >= 0 ? 'text-success' : 'text-danger';
+            const sign = portfolioIrr >= 0 ? '+' : '';
+            portfolioIrrDisplay = `${sign}${portfolioIrr.toFixed(2)}%`;
         }
 
         document.getElementById('realized-total-cost').innerHTML = `<strong>${formatCurrency(totalCost)}</strong>`;
         document.getElementById('realized-total-proceeds').innerHTML = `<strong>${formatCurrency(totalProceeds)}</strong>`;
         document.getElementById('realized-total-pnl').innerHTML = `<strong class="${totalPnlClass}">${formatCurrency(totalPnl)}</strong>`;
         document.getElementById('realized-total-pnl-pct').innerHTML = `<strong class="${totalPnlPctClass}">${formatPercentage(totalPnlPct)}</strong>`;
-        document.getElementById('realized-total-irr').innerHTML = `<strong class="${avgIrrClass}">${avgIrrDisplay}</strong>`;
+        document.getElementById('realized-total-irr').innerHTML = `<strong class="${portfolioIrrClass}">${portfolioIrrDisplay}</strong>`;
 
         tfoot.classList.remove('d-none');
     }

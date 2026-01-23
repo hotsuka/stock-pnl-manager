@@ -281,6 +281,8 @@
     let metrics2SortDirection = 'asc';
     // フィルター状態
     let currentFilter = 'all'; // 'all', 'jp', 'foreign'
+    // ポートフォリオIRR
+    let portfolioIrr = null;
 
     // ページ読み込み時にデータ取得
     document.addEventListener('DOMContentLoaded', function () {
@@ -340,7 +342,10 @@
         // 4. IRRデータを取得
         await loadIrrData();
 
-        // 5. テーブル描画
+        // 5. ポートフォリオIRRを取得
+        await loadPortfolioIrr();
+
+        // 6. テーブル描画
         renderHoldingsTable();
     }
 
@@ -485,7 +490,7 @@
     }
 
     // フィルターを設定
-    function setFilter(filter) {
+    async function setFilter(filter) {
         currentFilter = filter;
 
         // ボタンの状態を更新
@@ -493,6 +498,9 @@
             btn.classList.remove('active');
         });
         document.getElementById(`filter-${filter}`).classList.add('active');
+
+        // ポートフォリオIRRを取得
+        await loadPortfolioIrr();
 
         // テーブルを再描画
         renderHoldingsTable();
@@ -505,6 +513,24 @@
             } else if (activeTabId === 'metrics2-tab') {
                 renderMetrics2Table();
             }
+        }
+    }
+
+    // ポートフォリオIRRを取得
+    async function loadPortfolioIrr() {
+        try {
+            const response = await fetch(`/api/holdings/portfolio-irr?filter=${currentFilter}`);
+            const result = await response.json();
+
+            if (result.success) {
+                portfolioIrr = result.irr;
+            } else {
+                console.error('ポートフォリオIRR取得エラー:', result.error);
+                portfolioIrr = null;
+            }
+        } catch (error) {
+            console.error('ポートフォリオIRR取得エラー:', error);
+            portfolioIrr = null;
         }
     }
 
@@ -586,12 +612,10 @@
         document.getElementById('holdings-total-pnl-pct').innerHTML = `<strong class="${pnlClass}">${formatPercentage(totalPnLPct)}</strong>`;
         document.getElementById('holdings-total-pnl-pct').className = `text-end ${pnlClass}`;
 
-        // Display IRR (average of filtered holdings with valid IRR)
-        const validIrrs = filteredData.filter(h => h.irr !== null).map(h => h.irr);
-        if (validIrrs.length > 0) {
-            const avgIrr = validIrrs.reduce((sum, irr) => sum + irr, 0) / validIrrs.length;
-            const irrClass = avgIrr >= 0 ? 'positive' : 'negative';
-            document.getElementById('holdings-total-irr').innerHTML = `<strong class="${irrClass}">${formatPercentage(avgIrr)}</strong>`;
+        // Display Portfolio IRR (calculated from all cash flows)
+        if (portfolioIrr !== null) {
+            const irrClass = portfolioIrr >= 0 ? 'positive' : 'negative';
+            document.getElementById('holdings-total-irr').innerHTML = `<strong class="${irrClass}">${formatPercentage(portfolioIrr)}</strong>`;
             document.getElementById('holdings-total-irr').className = `text-end ${irrClass}`;
         } else {
             document.getElementById('holdings-total-irr').innerHTML = `<strong>-</strong>`;

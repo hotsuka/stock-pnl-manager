@@ -1677,6 +1677,60 @@ def delete_stock_price_override(ticker, date):
         raise DatabaseError(f"株価の削除に失敗しました: {str(e)}")
 
 
+@bp.route("/holdings/portfolio-irr", methods=["GET"])
+def get_holdings_portfolio_irr():
+    """保有銘柄ポートフォリオ全体のIRRを取得"""
+    try:
+        log_api_call(logger, "/holdings/portfolio-irr", "GET")
+
+        # フィルターパラメータ（all, jp, foreign）
+        filter_type = request.args.get("filter", "all")
+        if filter_type not in ["all", "jp", "foreign"]:
+            filter_type = "all"
+
+        result = PerformanceService.calculate_portfolio_irr_for_holdings(filter_type)
+
+        return jsonify(
+            {
+                "success": True,
+                "filter": filter_type,
+                "irr": result["irr"],
+                "error": result["error"],
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"ポートフォリオIRR取得エラー: {str(e)}")
+        raise DatabaseError(f"ポートフォリオIRRの取得に失敗しました: {str(e)}")
+
+
+@bp.route("/realized-pnl/portfolio-irr", methods=["GET"])
+def get_realized_portfolio_irr():
+    """売却済み銘柄ポートフォリオ全体のIRRを取得"""
+    try:
+        log_api_call(logger, "/realized-pnl/portfolio-irr", "GET")
+
+        # フィルターパラメータ（all, jp, foreign）
+        filter_type = request.args.get("filter", "all")
+        if filter_type not in ["all", "jp", "foreign"]:
+            filter_type = "all"
+
+        result = PerformanceService.calculate_portfolio_irr_for_realized(filter_type)
+
+        return jsonify(
+            {
+                "success": True,
+                "filter": filter_type,
+                "irr": result["irr"],
+                "error": result["error"],
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"売却済みポートフォリオIRR取得エラー: {str(e)}")
+        raise DatabaseError(f"売却済みポートフォリオIRRの取得に失敗しました: {str(e)}")
+
+
 @bp.route("/health", methods=["GET"])
 def health_check():
     """ヘルスチェックエンドポイント"""
