@@ -77,6 +77,18 @@
 <div class="realized-pnl-page">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>売却済み銘柄一覧</h1>
+        <!-- フィルターボタン -->
+        <div class="btn-group" role="group" aria-label="株式フィルター">
+            <button type="button" class="btn btn-outline-secondary active" id="filter-all" onclick="setFilter('all')">
+                すべて
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="filter-jp" onclick="setFilter('jp')">
+                日本株
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="filter-foreign" onclick="setFilter('foreign')">
+                外国株
+            </button>
+        </div>
     </div>
 
     <!-- 売却済み銘柄テーブル -->
@@ -127,6 +139,8 @@
     let currentRealizedSortDirection = 'asc';
     let exchangeRates = {};
     let irrData = {};
+    // フィルター状態
+    let currentFilter = 'all'; // 'all', 'jp', 'foreign'
 
     // ページ読み込み時にデータ取得
     document.addEventListener('DOMContentLoaded', function () {
@@ -182,7 +196,7 @@
 
             if (result.success && result.realized_pnl.length > 0) {
                 realizedPnlData = result.realized_pnl;
-                renderRealizedPnlTable(realizedPnlData);
+                renderRealizedPnlTable();
             } else {
                 document.getElementById('realized-pnl-tbody').innerHTML = '<tr><td colspan="10" class="text-center">売却済み銘柄がありません</td></tr>';
             }
@@ -192,12 +206,43 @@
         }
     }
 
-    function renderRealizedPnlTable(data) {
+    // フィルターを設定
+    function setFilter(filter) {
+        currentFilter = filter;
+
+        // ボタンの状態を更新
+        document.querySelectorAll('.btn-group .btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.getElementById(`filter-${filter}`).classList.add('active');
+
+        // テーブルを再描画
+        renderRealizedPnlTable();
+    }
+
+    // フィルタリングされたデータを取得
+    function getFilteredData(data) {
+        if (currentFilter === 'all') {
+            return data;
+        } else if (currentFilter === 'jp') {
+            return data.filter(r => r.ticker_symbol.endsWith('.T'));
+        } else if (currentFilter === 'foreign') {
+            return data.filter(r => !r.ticker_symbol.endsWith('.T'));
+        }
+        return data;
+    }
+
+    function renderRealizedPnlTable() {
         const tbody = document.getElementById('realized-pnl-tbody');
         const tfoot = document.getElementById('realized-pnl-tfoot');
 
-        if (!data) {
-            data = realizedPnlData;
+        // フィルタリング
+        const data = getFilteredData(realizedPnlData);
+
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center">売却済み銘柄がありません</td></tr>';
+            tfoot.classList.add('d-none');
+            return;
         }
 
         // Calculate totals

@@ -116,9 +116,23 @@
 <div class="holdings-page">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>保有銘柄一覧</h1>
-        <button class="btn btn-primary" onclick="refreshData()">
-            <i class="bi bi-arrow-clockwise"></i> データを更新
-        </button>
+        <div class="d-flex gap-3 align-items-center">
+            <!-- フィルターボタン -->
+            <div class="btn-group" role="group" aria-label="株式フィルター">
+                <button type="button" class="btn btn-outline-secondary active" id="filter-all" onclick="setFilter('all')">
+                    すべて
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="filter-jp" onclick="setFilter('jp')">
+                    日本株
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="filter-foreign" onclick="setFilter('foreign')">
+                    外国株
+                </button>
+            </div>
+            <button class="btn btn-primary" onclick="refreshData()">
+                <i class="bi bi-arrow-clockwise"></i> データを更新
+            </button>
+        </div>
     </div>
 
     <!-- タブナビゲーション -->
@@ -265,6 +279,8 @@
     let metrics1SortDirection = 'asc';
     let metrics2SortField = null;
     let metrics2SortDirection = 'asc';
+    // フィルター状態
+    let currentFilter = 'all'; // 'all', 'jp', 'foreign'
 
     // ページ読み込み時にデータ取得
     document.addEventListener('DOMContentLoaded', function () {
@@ -468,16 +484,55 @@
         return holding.unrealized_pnl_pct !== null ? parseFloat(holding.unrealized_pnl_pct) : null;
     }
 
+    // フィルターを設定
+    function setFilter(filter) {
+        currentFilter = filter;
+
+        // ボタンの状態を更新
+        document.querySelectorAll('.btn-group .btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.getElementById(`filter-${filter}`).classList.add('active');
+
+        // テーブルを再描画
+        renderHoldingsTable();
+
+        // 評価指標タブも再描画（表示中の場合）
+        if (metricsData.length > 0) {
+            const activeTabId = document.querySelector('#holdingsTabs .nav-link.active')?.id;
+            if (activeTabId === 'metrics1-tab') {
+                renderMetrics1Table();
+            } else if (activeTabId === 'metrics2-tab') {
+                renderMetrics2Table();
+            }
+        }
+    }
+
+    // フィルタリングされたデータを取得
+    function getFilteredData(data) {
+        if (currentFilter === 'all') {
+            return data;
+        } else if (currentFilter === 'jp') {
+            return data.filter(h => h.ticker_symbol.endsWith('.T'));
+        } else if (currentFilter === 'foreign') {
+            return data.filter(h => !h.ticker_symbol.endsWith('.T'));
+        }
+        return data;
+    }
+
     function renderHoldingsTable() {
         const tbody = document.getElementById('holdings-tbody');
 
-        if (holdingsData.length === 0) {
+        // フィルタリング
+        const filteredData = getFilteredData(holdingsData);
+
+        if (filteredData.length === 0) {
             tbody.innerHTML = '<tr><td colspan="11" class="text-center">保有銘柄がありません</td></tr>';
             document.getElementById('holdings-tfoot').classList.add('d-none');
             return;
         }
 
-        tbody.innerHTML = holdingsData.map(h => {
+        tbody.innerHTML = filteredData.map(h => {
             const unrealizedPnL = calculateUnrealizedPnL(h);
             const unrealizedPnLPct = calculateUnrealizedPnLPct(h);
             const pnlClass = unrealizedPnL !== null && unrealizedPnL >= 0 ? 'positive' : 'negative';
@@ -508,13 +563,13 @@
             `;
         }).join('');
 
-        // Calculate and display totals
-        const totalCost = holdingsData.reduce((sum, h) => sum + (parseFloat(h.total_cost) || 0), 0);
-        const totalValue = holdingsData.reduce((sum, h) => {
+        // Calculate and display totals (フィルタリングされたデータを使用)
+        const totalCost = filteredData.reduce((sum, h) => sum + (parseFloat(h.total_cost) || 0), 0);
+        const totalValue = filteredData.reduce((sum, h) => {
             const valueJPY = h.current_value;
             return sum + (valueJPY !== null && !isNaN(valueJPY) ? parseFloat(valueJPY) : 0);
         }, 0);
-        const totalPnL = holdingsData.reduce((sum, h) => {
+        const totalPnL = filteredData.reduce((sum, h) => {
             const pnl = h.unrealized_pnl;
             return sum + (pnl !== null && !isNaN(pnl) ? parseFloat(pnl) : 0);
         }, 0);
@@ -531,8 +586,8 @@
         document.getElementById('holdings-total-pnl-pct').innerHTML = `<strong class="${pnlClass}">${formatPercentage(totalPnLPct)}</strong>`;
         document.getElementById('holdings-total-pnl-pct').className = `text-end ${pnlClass}`;
 
-        // Display IRR (average of all holdings with valid IRR)
-        const validIrrs = holdingsData.filter(h => h.irr !== null).map(h => h.irr);
+        // Display IRR (average of filtered holdings with valid IRR)
+        const validIrrs = filteredData.filter(h => h.irr !== null).map(h => h.irr);
         if (validIrrs.length > 0) {
             const avgIrr = validIrrs.reduce((sum, irr) => sum + irr, 0) / validIrrs.length;
             const irrClass = avgIrr >= 0 ? 'positive' : 'negative';
@@ -542,9 +597,9 @@
             document.getElementById('holdings-total-irr').innerHTML = `<strong>-</strong>`;
         }
 
-        // Calculate and display total day change percentage
+        // Calculate and display total day change percentage (フィルタリングされたデータを使用)
         let totalYesterdayValue = 0;
-        holdingsData.forEach(h => {
+        filteredData.forEach(h => {
             const currentValJPY = h.current_value;
             if (currentValJPY !== null && !isNaN(currentValJPY)) {
                 const dayChangePct = parseFloat(h.day_change_pct) || 0;
@@ -721,6 +776,13 @@
         }
     }
 
+    // 評価指標用のフィルタリング（holdingsDataのティッカーに基づく）
+    function getFilteredMetricsData(data) {
+        const filteredHoldings = getFilteredData(holdingsData);
+        const filteredTickers = filteredHoldings.map(h => h.ticker_symbol);
+        return data.filter(m => filteredTickers.includes(m.ticker_symbol));
+    }
+
     // 評価指標1テーブルを描画 (バリュエーション指標)
     function renderMetrics1Table() {
         console.log('[DEBUG] renderMetrics1Table 開始');
@@ -728,7 +790,10 @@
         console.log('[DEBUG] tbody要素:', tbody);
         console.log('[DEBUG] metricsData件数:', metricsData.length);
 
-        if (metricsData.length === 0) {
+        // フィルタリング
+        const filteredMetrics = getFilteredMetricsData(metricsData);
+
+        if (filteredMetrics.length === 0) {
             console.log('[DEBUG] データなし');
             tbody.innerHTML = '<tr><td colspan="10" class="text-center">評価指標データがありません</td></tr>';
             return;
@@ -736,7 +801,7 @@
 
         console.log('[DEBUG] 評価指標1テーブル描画開始');
         try {
-            tbody.innerHTML = metricsData.map(m => {
+            tbody.innerHTML = filteredMetrics.map(m => {
                 // holdingsDataから株価情報を取得
                 const holding = holdingsData.find(h => h.ticker_symbol === m.ticker_symbol);
                 const currentPrice = holding ? holding.current_price : null;
@@ -772,7 +837,10 @@
         console.log('[DEBUG] tbody要素:', tbody);
         console.log('[DEBUG] metricsData件数:', metricsData.length);
 
-        if (metricsData.length === 0) {
+        // フィルタリング
+        const filteredMetrics = getFilteredMetricsData(metricsData);
+
+        if (filteredMetrics.length === 0) {
             console.log('[DEBUG] データなし');
             tbody.innerHTML = '<tr><td colspan="9" class="text-center">評価指標データがありません</td></tr>';
             return;
@@ -780,7 +848,7 @@
 
         console.log('[DEBUG] 評価指標2テーブル描画開始');
         try {
-            tbody.innerHTML = metricsData.map(m => {
+            tbody.innerHTML = filteredMetrics.map(m => {
                 // holdingsDataから株価と対前日変動率を取得
                 const holding = holdingsData.find(h => h.ticker_symbol === m.ticker_symbol);
                 const currentPrice = holding ? holding.current_price : null;
