@@ -32,29 +32,20 @@ RUN pip install --upgrade pip setuptools wheel && \
 # Stage 3: Production image
 FROM base as production
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser && \
-    mkdir -p /app /app/data /app/logs && \
-    chown -R appuser:appuser /app
-
 # Set working directory
 WORKDIR /app
 
 # Copy Python dependencies from builder stage
-COPY --from=dependencies /root/.local /home/appuser/.local
+COPY --from=dependencies /root/.local /root/.local
 
 # Copy application code
-COPY --chown=appuser:appuser . .
+COPY . .
 
 # Create necessary directories
-RUN mkdir -p data/uploads logs && \
-    chown -R appuser:appuser data logs
-
-# Switch to non-root user
-USER appuser
+RUN mkdir -p data/uploads logs
 
 # Update PATH to include user-installed packages
-ENV PATH=/home/appuser/.local/bin:$PATH
+ENV PATH=/root/.local/bin:$PATH
 
 # Expose port (Railway assigns PORT dynamically)
 EXPOSE 8000
