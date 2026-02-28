@@ -563,9 +563,12 @@ def export_transactions_csv():
             ]
         )
 
+    # UTF-8 BOM付きでExcelの文字化けを防止
+    csv_data = "\ufeff" + output.getvalue()
+
     response = current_app.response_class(
-        output.getvalue(),
-        mimetype="text/csv",
+        csv_data.encode("utf-8"),
+        mimetype="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": "attachment; filename=transactions.csv"
         },
