@@ -529,9 +529,7 @@ def export_transactions_csv():
     import csv
     import io
 
-    transactions = Transaction.query.order_by(
-        Transaction.transaction_date.desc()
-    ).all()
+    transactions = Transaction.query.order_by(Transaction.transaction_date.desc()).all()
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -569,9 +567,7 @@ def export_transactions_csv():
     response = current_app.response_class(
         csv_data.encode("utf-8"),
         mimetype="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition": "attachment; filename=transactions.csv"
-        },
+        headers={"Content-Disposition": "attachment; filename=transactions.csv"},
     )
     return response
 
@@ -1866,7 +1862,10 @@ def upload_database():
 
     file = request.files["file"]
     if not file.filename or not file.filename.endswith(".db"):
-        return jsonify({"success": False, "error": ".dbファイルのみアップロード可能です"}), 400
+        return (
+            jsonify({"success": False, "error": ".dbファイルのみアップロード可能です"}),
+            400,
+        )
 
     try:
         # Save uploaded file to temp location
@@ -1885,13 +1884,26 @@ def upload_database():
 
             if "transactions" not in tables:
                 temp_path.unlink()
-                return jsonify({
-                    "success": False,
-                    "error": "有効なStock P&L Managerのデータベースではありません（transactionsテーブルが見つかりません）"
-                }), 400
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": "有効なStock P&L Managerのデータベースではありません（transactionsテーブルが見つかりません）",
+                        }
+                    ),
+                    400,
+                )
         except sqlite3.DatabaseError:
             temp_path.unlink()
-            return jsonify({"success": False, "error": "有効なSQLiteデータベースではありません"}), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "有効なSQLiteデータベースではありません",
+                    }
+                ),
+                400,
+            )
 
         # Get current database path
         db_uri = current_app.config["SQLALCHEMY_DATABASE_URI"]
@@ -1909,15 +1921,20 @@ def upload_database():
         # Replace database
         shutil.move(str(temp_path), str(db_path))
 
-        return jsonify({
-            "success": True,
-            "message": "データベースをアップロードしました。ページを再読み込みしてください。",
-            "tables": tables,
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": "データベースをアップロードしました。ページを再読み込みしてください。",
+                "tables": tables,
+            }
+        )
 
     except Exception as e:
         logger.error(f"データベースアップロードエラー: {str(e)}")
-        return jsonify({"success": False, "error": f"エラーが発生しました: {str(e)}"}), 500
+        return (
+            jsonify({"success": False, "error": f"エラーが発生しました: {str(e)}"}),
+            500,
+        )
 
 
 @bp.route("/database/download", methods=["GET"])
@@ -1930,7 +1947,12 @@ def download_database():
     db_path = Path(db_uri.replace("sqlite:///", ""))
 
     if not db_path.exists():
-        return jsonify({"success": False, "error": "データベースファイルが見つかりません"}), 404
+        return (
+            jsonify(
+                {"success": False, "error": "データベースファイルが見つかりません"}
+            ),
+            404,
+        )
 
     return send_file(
         str(db_path),
