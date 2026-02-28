@@ -1941,6 +1941,7 @@ def upload_database():
 def download_database():
     """Download the current SQLite database file"""
     from pathlib import Path
+
     from flask import send_file
 
     db_uri = current_app.config["SQLALCHEMY_DATABASE_URI"]
