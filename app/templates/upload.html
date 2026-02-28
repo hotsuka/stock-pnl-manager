@@ -20,6 +20,11 @@
                     個別入力
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="db-tab" data-bs-toggle="tab" data-bs-target="#db-input" type="button" role="tab">
+                    DB移行
+                </button>
+            </li>
         </ul>
 
         <div class="tab-content" id="inputTabsContent">
@@ -152,6 +157,44 @@
                                     受渡金額を計算
                                 </button>
                             </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+            <!-- DB移行タブ -->
+            <div class="tab-pane fade" id="db-input" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">データベース移行</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            ローカル環境のデータベースファイル（stock_pnl.db）を直接アップロードして、
+                            全データ（取引・配当・株価修正など）を一括移行できます。
+                        </div>
+
+                        <h6 class="mb-3">DBダウンロード（エクスポート）</h6>
+                        <a href="/api/database/download" class="btn btn-success mb-4">
+                            現在のDBをダウンロード
+                        </a>
+
+                        <hr>
+
+                        <h6 class="mb-3">DBアップロード（インポート）</h6>
+                        <div class="alert alert-warning">
+                            アップロードすると現在のデータベースは上書きされます。この操作は元に戻せません。
+                        </div>
+                        <form id="dbUploadForm" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="dbFile" class="form-label">.dbファイルを選択</label>
+                                <input class="form-control" type="file" id="dbFile" name="file" accept=".db" required>
+                            </div>
+                            <button type="submit" class="btn btn-danger" id="dbUploadBtn">
+                                <span class="spinner-border spinner-border-sm d-none" id="dbUploadSpinner"></span>
+                                DBをアップロードして上書き
+                            </button>
                         </form>
                     </div>
                 </div>
@@ -308,6 +351,45 @@ document.getElementById('manualTransactionForm').addEventListener('submit', asyn
         }
     } catch (error) {
         showError({ error: '通信エラーが発生しました: ' + error.message });
+    } finally {
+        btn.disabled = false;
+        spinner.classList.add('d-none');
+    }
+});
+
+// DBアップロードフォーム
+document.getElementById('dbUploadForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    if (!confirm('現在のデータベースが上書きされます。よろしいですか？')) {
+        return;
+    }
+
+    const formData = new FormData();
+    const fileInput = document.getElementById('dbFile');
+    formData.append('file', fileInput.files[0]);
+
+    const btn = document.getElementById('dbUploadBtn');
+    const spinner = document.getElementById('dbUploadSpinner');
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+
+    try {
+        const response = await fetch('/api/database/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('エラー: ' + (data.error || '不明なエラー'));
+        }
+    } catch (error) {
+        alert('通信エラー: ' + error.message);
     } finally {
         btn.disabled = false;
         spinner.classList.add('d-none');

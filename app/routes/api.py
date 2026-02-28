@@ -1850,3 +1850,91 @@ def health_check():
     status_code = 200 if health_status["status"] == "healthy" else 503
 
     return jsonify(health_status), status_code
+
+
+@bp.route("/database/upload", methods=["POST"])
+def upload_database():
+    """Upload a SQLite database file to replace the current one"""
+    import shutil
+    import sqlite3
+    from pathlib import Path
+
+    from app import db
+
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "ファイルが選択されていません"}), 400
+
+    file = request.files["file"]
+    if not file.filename or not file.filename.endswith(".db"):
+        return jsonify({"success": False, "error": ".dbファイルのみアップロード可能です"}), 400
+
+    try:
+        # Save uploaded file to temp location
+        upload_folder = current_app.config["UPLOAD_FOLDER"]
+        Path(upload_folder).mkdir(parents=True, exist_ok=True)
+        temp_path = Path(upload_folder) / "uploaded_db.tmp"
+        file.save(str(temp_path))
+
+        # Validate it's a valid SQLite database
+        try:
+            conn = sqlite3.connect(str(temp_path))
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            conn.close()
+
+            if "transactions" not in tables:
+                temp_path.unlink()
+                return jsonify({
+                    "success": False,
+                    "error": "有効なStock P&L Managerのデータベースではありません（transactionsテーブルが見つかりません）"
+                }), 400
+        except sqlite3.DatabaseError:
+            temp_path.unlink()
+            return jsonify({"success": False, "error": "有効なSQLiteデータベースではありません"}), 400
+
+        # Get current database path
+        db_uri = current_app.config["SQLALCHEMY_DATABASE_URI"]
+        db_path = Path(db_uri.replace("sqlite:///", ""))
+
+        # Close all connections
+        db.session.remove()
+        db.engine.dispose()
+
+        # Backup current database
+        if db_path.exists():
+            backup_path = db_path.with_suffix(".db.bak")
+            shutil.copy2(str(db_path), str(backup_path))
+
+        # Replace database
+        shutil.move(str(temp_path), str(db_path))
+
+        return jsonify({
+            "success": True,
+            "message": "データベースをアップロードしました。ページを再読み込みしてください。",
+            "tables": tables,
+        })
+
+    except Exception as e:
+        logger.error(f"データベースアップロードエラー: {str(e)}")
+        return jsonify({"success": False, "error": f"エラーが発生しました: {str(e)}"}), 500
+
+
+@bp.route("/database/download", methods=["GET"])
+def download_database():
+    """Download the current SQLite database file"""
+    from pathlib import Path
+    from flask import send_file
+
+    db_uri = current_app.config["SQLALCHEMY_DATABASE_URI"]
+    db_path = Path(db_uri.replace("sqlite:///", ""))
+
+    if not db_path.exists():
+        return jsonify({"success": False, "error": "データベースファイルが見つかりません"}), 404
+
+    return send_file(
+        str(db_path),
+        mimetype="application/x-sqlite3",
+        as_attachment=True,
+        download_name="stock_pnl.db",
+    )
