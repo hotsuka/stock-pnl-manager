@@ -4,7 +4,7 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "flask db upgrade && gunicorn -w 2 -b 0.0.0.0:$PORT --timeout 120 'app:create_app(\"production\")'"
-healthcheckPath = "/api/health"
-healthcheckTimeout = 10
+healthcheckPath = "/"
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
