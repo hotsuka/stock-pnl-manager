@@ -523,6 +523,56 @@ def delete_holding(ticker):
         )
 
 
+@bp.route("/transactions/export", methods=["GET"])
+def export_transactions_csv():
+    """Export all transactions as CSV"""
+    import csv
+    import io
+
+    transactions = Transaction.query.order_by(
+        Transaction.transaction_date.desc()
+    ).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "約定日",
+            "ティッカー",
+            "銘柄名",
+            "取引種別",
+            "数量",
+            "単価",
+            "手数料",
+            "受渡金額",
+            "通貨",
+        ]
+    )
+    for t in transactions:
+        writer.writerow(
+            [
+                t.transaction_date.isoformat() if t.transaction_date else "",
+                t.ticker_symbol,
+                t.security_name or "",
+                t.transaction_type,
+                str(t.quantity),
+                str(t.unit_price),
+                str(t.commission) if t.commission else "0",
+                str(t.settlement_amount) if t.settlement_amount else "",
+                t.currency,
+            ]
+        )
+
+    response = current_app.response_class(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=transactions.csv"
+        },
+    )
+    return response
+
+
 @bp.route("/transactions", methods=["GET"])
 def get_transactions():
     """Get all transactions"""
