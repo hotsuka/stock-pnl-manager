@@ -11,14 +11,21 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-please-change-in-production'
 
     # Database configuration
-    # Windows環境でのパス区切り文字の問題を解決するため、as_posix()を使用
-    _db_path = (BASE_DIR / "data" / "stock_pnl.db").as_posix()
+    # Railway Persistent Volume対応: RAILWAY_VOLUME_MOUNT_PATHが設定されている場合はそのパスを使用
+    _volume_path = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH')
+    if _volume_path:
+        _data_dir = Path(_volume_path)
+        _db_path = (_data_dir / "stock_pnl.db").as_posix()
+    else:
+        _data_dir = BASE_DIR / "data"
+        # Windows環境でのパス区切り文字の問題を解決するため、as_posix()を使用
+        _db_path = (_data_dir / "stock_pnl.db").as_posix()
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         f'sqlite:///{_db_path}'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # File upload configuration
-    UPLOAD_FOLDER = BASE_DIR / 'data' / 'uploads'
+    UPLOAD_FOLDER = Path(_volume_path) / 'uploads' if _volume_path else BASE_DIR / 'data' / 'uploads'
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB max file size
     ALLOWED_EXTENSIONS = {'csv'}
 
@@ -31,7 +38,7 @@ class Config:
     ITEMS_PER_PAGE = 50
 
     # Backup configuration
-    BACKUP_DIR = BASE_DIR / 'backups'
+    BACKUP_DIR = Path(_volume_path) / 'backups' if _volume_path else BASE_DIR / 'backups'
     AUTO_BACKUP_ENABLED = True
     BACKUP_RETENTION_DAYS = 7  # バックアップ保持日数
     BACKUP_INTERVAL_HOURS = 24  # バックアップ間隔（時間）
