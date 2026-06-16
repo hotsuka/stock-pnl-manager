@@ -1222,7 +1222,9 @@ def get_dashboard_summary():
                         ytd_rate = 1.0
                     else:
                         rate_entry = rates.get(curr)
-                        ytd_rate = float(rate_entry.get("rate", 1.0)) if rate_entry else 1.0
+                        ytd_rate = (
+                            float(rate_entry.get("rate", 1.0)) if rate_entry else 1.0
+                        )
                     ytd_base_value = ytd_price * qty * ytd_rate
                     ytd_holding_pnl += current_val - ytd_base_value
                 # それでもない場合は年初来含み損益に寄与させない（0扱い）
