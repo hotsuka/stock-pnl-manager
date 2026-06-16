@@ -1205,8 +1205,27 @@ def get_dashboard_summary():
                 ytd_base_value = ytd_price * qty * ytd_rate
                 ytd_holding_pnl += current_val - ytd_base_value
             else:
-                # 昨年末株価がDBにない場合は取得コスト全体を代用
-                ytd_holding_pnl += current_val - float(holding.total_cost or 0)
+                # 昨年末株価がDBにない場合、年初以降の最初の株価で代用を試みる
+                ytd_fallback_rec = (
+                    StockPrice.query.filter(
+                        StockPrice.ticker_symbol == ticker,
+                        StockPrice.price_date >= ytd_start,
+                    )
+                    .order_by(StockPrice.price_date.asc())
+                    .first()
+                )
+                if ytd_fallback_rec:
+                    ytd_price = float(ytd_fallback_rec.close_price)
+                    qty = float(holding.total_quantity)
+                    curr = str(holding.currency or "JPY").strip().upper()
+                    if curr in ["JPY", "日本円"]:
+                        ytd_rate = 1.0
+                    else:
+                        rate_entry = rates.get(curr)
+                        ytd_rate = float(rate_entry.get("rate", 1.0)) if rate_entry else 1.0
+                    ytd_base_value = ytd_price * qty * ytd_rate
+                    ytd_holding_pnl += current_val - ytd_base_value
+                # それでもない場合は年初来含み損益に寄与させない（0扱い）
         else:
             # 全て今年以降に取得 → 取得コスト基準（含み損益全体 = 年初来含み損益）
             ytd_holding_pnl += current_val - float(holding.total_cost or 0)
