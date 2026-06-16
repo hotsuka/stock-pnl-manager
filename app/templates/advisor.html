@@ -1,0 +1,641 @@
+{% extends "base.html" %}
+{% block title %}週次アドバイザー - Stock P&L Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+  .grade-badge-A { background-color: #198754; }
+  .grade-badge-B { background-color: #0d6efd; }
+  .grade-badge-C { background-color: #6c757d; }
+  .quality-Good  { background-color: #198754; }
+  .quality-Watch { background-color: #ffc107; color: #000; }
+  .quality-要検討 { background-color: #dc3545; }
+  .score-bar-wrap { background: #e9ecef; border-radius: 4px; height: 8px; }
+  .score-bar { border-radius: 4px; height: 8px; }
+  .card-proposal { border-left: 4px solid #0d6efd; }
+  .arrow-icon { font-size: 1.4rem; color: #0d6efd; }
+  .screener-stale { background-color: #fff3cd; border-color: #ffecb5; }
+  .return-positive { color: #198754; font-weight: 600; }
+  .return-negative { color: #dc3545; font-weight: 600; }
+  .loading-overlay { display: none; text-align: center; padding: 2rem; }
+  #cashInputSection { background: #f8f9fa; border-radius: 8px; padding: 1.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0"><i class="bi bi-graph-up-arrow"></i> 週次ポートフォリオアドバイザー</h2>
+  <small class="text-muted" id="generatedAt"></small>
+</div>
+
+<!-- 警告バナー -->
+<div id="warningBanner" class="d-none"></div>
+
+<!-- タブナビ -->
+<ul class="nav nav-tabs mb-3" id="advisorTabs">
+  <li class="nav-item">
+    <a class="nav-link active" id="tab-review-link" href="#" onclick="showTab('review');return false;">
+      <i class="bi bi-calendar-week"></i> 週次振り返り
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" id="tab-replace-link" href="#" onclick="showTab('replace');return false;">
+      <i class="bi bi-arrow-left-right"></i> 入替提案
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" id="tab-cash-link" href="#" onclick="showTab('cash');return false;">
+      <i class="bi bi-cash-coin"></i> 余剰現金投資
+    </a>
+  </li>
+</ul>
+
+<!-- ============================================================ -->
+<!-- Tab A: 週次振り返り -->
+<!-- ============================================================ -->
+<div id="tab-review">
+  <div class="row mb-3 align-items-end">
+    <div class="col-auto">
+      <label class="form-label mb-1">週末日</label>
+      <input type="date" id="weekEndInput" class="form-control form-control-sm" style="width:160px">
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-primary btn-sm" onclick="loadReview()">
+        <i class="bi bi-arrow-clockwise"></i> 更新
+      </button>
+    </div>
+  </div>
+
+  <div id="reviewLoading" class="loading-overlay">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2">データを取得中...</p>
+  </div>
+  <div id="reviewContent" class="d-none">
+
+    <!-- サマリーカード -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="text-muted small">週間リターン</div>
+            <div id="summPortfolioReturn" class="fs-3 fw-bold mt-1">--</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="text-muted small">対TOPIX α</div>
+            <div id="summAlphaTopix" class="fs-3 fw-bold mt-1">--</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="text-muted small">対S&P500 α</div>
+            <div id="summAlphaSp500" class="fs-3 fw-bold mt-1">--</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="text-muted small">PF評価額</div>
+            <div id="summPortfolioValue" class="fs-5 fw-bold mt-1">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ベンチマーク比較 -->
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-bar-chart"></i> ベンチマーク比較</div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>指標</th><th class="text-end">週間リターン</th></tr>
+          </thead>
+          <tbody id="benchmarkTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 保有銘柄週間リターン -->
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-list-ol"></i> 保有銘柄 週間リターンランキング</div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>銘柄</th>
+              <th class="text-end">週リターン</th>
+              <th class="text-end">PF比率</th>
+              <th class="text-end">含み損益</th>
+              <th class="text-center">品質</th>
+            </tr>
+          </thead>
+          <tbody id="holdingsReturnTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 週間確定損益・配当 -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="text-muted small">週間確定損益</div>
+            <div id="summRealizedPnl" class="fs-4 fw-bold mt-1">--</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="text-muted small">週間配当収入</div>
+            <div id="summDividend" class="fs-4 fw-bold mt-1">--</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="text-muted small">品質評価</div>
+            <div class="mt-1">
+              <span class="badge quality-Good me-1" id="goodCount">--</span>
+              <span class="badge quality-Watch me-1" id="watchCount">--</span>
+              <span class="badge quality-要検討" id="reviewCount">--</span>
+            </div>
+            <div class="small text-muted mt-1">Good / Watch / 要検討</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 品質チェック詳細 -->
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-clipboard-check"></i> 保有銘柄 品質チェック</div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>銘柄</th>
+              <th class="text-end">PER</th>
+              <th class="text-end">PBR</th>
+              <th class="text-end">利益率</th>
+              <th class="text-center">品質</th>
+              <th>評価理由</th>
+            </tr>
+          </thead>
+          <tbody id="qualityTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /reviewContent -->
+</div><!-- /tab-review -->
+
+<!-- ============================================================ -->
+<!-- Tab B: 入替提案 -->
+<!-- ============================================================ -->
+<div id="tab-replace" class="d-none">
+  <div id="replaceLoading" class="loading-overlay">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2">分析中...</p>
+  </div>
+  <div id="replaceContent" class="d-none">
+
+    <!-- スクリーナー鮮度バナー -->
+    <div id="screenerFreshnessBar" class="alert mb-3" role="alert"></div>
+
+    <!-- 売却候補 -->
+    <div class="card mb-4">
+      <div class="card-header text-danger"><i class="bi bi-dash-circle"></i> 売却候補</div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>銘柄</th>
+              <th class="text-end">スコア</th>
+              <th class="text-end">含み損益</th>
+              <th>売却理由</th>
+              <th>税金メモ</th>
+            </tr>
+          </thead>
+          <tbody id="sellCandidateTable"></tbody>
+        </table>
+        <div id="noSellMsg" class="text-center py-3 text-muted d-none">売却候補はありません</div>
+      </div>
+    </div>
+
+    <!-- 購入候補 -->
+    <div class="card mb-4">
+      <div class="card-header text-success"><i class="bi bi-plus-circle"></i> 購入候補（スクリーナー推奨）</div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>銘柄</th>
+              <th class="text-center">グレード</th>
+              <th class="text-end">スコア</th>
+              <th>エントリー価格帯</th>
+              <th>投資テーゼ</th>
+              <th>プリセット</th>
+            </tr>
+          </thead>
+          <tbody id="buyCandidateTable"></tbody>
+        </table>
+        <div id="noBuyMsg" class="text-center py-3 text-muted d-none">購入候補はありません（スクリーナーデータを確認してください）</div>
+      </div>
+    </div>
+
+    <!-- 入替提案カード -->
+    <h5 class="mb-3"><i class="bi bi-arrow-left-right text-primary"></i> 入替提案</h5>
+    <div id="proposalCards"></div>
+    <div id="noProposalMsg" class="alert alert-secondary d-none">
+      現時点では入替提案がありません。売却候補または購入候補が不足しています。
+    </div>
+
+  </div><!-- /replaceContent -->
+</div><!-- /tab-replace -->
+
+<!-- ============================================================ -->
+<!-- Tab C: 余剰現金投資 -->
+<!-- ============================================================ -->
+<div id="tab-cash" class="d-none">
+  <div id="cashInputSection" class="mb-4">
+    <h5 class="mb-3"><i class="bi bi-cash-coin"></i> 余剰現金の追加投資提案</h5>
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label mb-1">余剰現金額（円）</label>
+        <input type="number" id="cashInput" class="form-control" placeholder="例: 500000" min="0" step="10000">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-success" onclick="loadCashProposals()">
+          <i class="bi bi-calculator"></i> 提案を計算
+        </button>
+      </div>
+    </div>
+    <small class="text-muted d-block mt-1">
+      ※ 1銘柄の上限はPF総額の10%。Aグレード優先で配分します。
+    </small>
+  </div>
+
+  <div id="cashLoading" class="loading-overlay">
+    <div class="spinner-border text-success" role="status"></div>
+    <p class="mt-2">計算中...</p>
+  </div>
+  <div id="cashContent" class="d-none">
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body text-center">
+            <div class="text-muted small">入力現金</div>
+            <div id="cashSummInput" class="fs-4 fw-bold mt-1">--</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body text-center">
+            <div class="text-muted small">投資予定合計</div>
+            <div id="cashSummTotal" class="fs-4 fw-bold mt-1 text-success">--</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body text-center">
+            <div class="text-muted small">残余現金</div>
+            <div id="cashSummRemain" class="fs-4 fw-bold mt-1">--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header text-success"><i class="bi bi-graph-up"></i> 投資提案一覧</div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>銘柄</th>
+              <th class="text-center">グレード</th>
+              <th class="text-end">スコア</th>
+              <th>エントリー価格帯</th>
+              <th class="text-end">推奨金額</th>
+              <th class="text-end">推奨株数</th>
+              <th class="text-end">投資後PF比率</th>
+              <th>投資テーゼ</th>
+            </tr>
+          </thead>
+          <tbody id="cashProposalTable"></tbody>
+        </table>
+        <div id="noCashMsg" class="text-center py-3 text-muted d-none">
+          投資候補がありません。スクリーナーデータを確認してください。
+        </div>
+      </div>
+    </div>
+  </div><!-- /cashContent -->
+</div><!-- /tab-cash -->
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let reviewData = null;
+let advisorData = null;
+
+// ページロード時に週次レビューと入替提案を両方ロード
+document.addEventListener('DOMContentLoaded', () => {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('weekEndInput').value = today;
+  loadReview();
+  loadAdvisorData();
+});
+
+function showTab(name) {
+  ['review', 'replace', 'cash'].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('d-none', t !== name);
+    document.getElementById(`tab-${t}-link`).classList.toggle('active', t === name);
+  });
+}
+
+// ── 週次レビュー ──────────────────────────────────────────────
+async function loadReview() {
+  const weekEnd = document.getElementById('weekEndInput').value;
+  const url = weekEnd ? `/advisor/api/weekly-review?week_end=${weekEnd}` : '/advisor/api/weekly-review';
+  showLoading('review', true);
+  document.getElementById('reviewContent').classList.add('d-none');
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error);
+    reviewData = json.data;
+    renderReview(reviewData);
+  } catch(e) {
+    showError('reviewContent', `週次レビューの取得に失敗しました: ${e.message}`);
+  } finally {
+    showLoading('review', false);
+  }
+}
+
+function renderReview(d) {
+  document.getElementById('generatedAt').textContent = `生成: ${d.generated_at?.slice(0,16) || ''}`;
+  document.getElementById('summPortfolioReturn').innerHTML = fmtReturn(d.portfolio_week_return_pct);
+  document.getElementById('summAlphaTopix').innerHTML = fmtReturn(d.alpha_vs_topix);
+  document.getElementById('summAlphaSp500').innerHTML = fmtReturn(d.alpha_vs_sp500);
+  document.getElementById('summPortfolioValue').textContent = fmtJpy(d.total_portfolio_value_jpy);
+  document.getElementById('summRealizedPnl').innerHTML = fmtPnl(d.weekly_realized_pnl);
+  document.getElementById('summDividend').textContent = fmtJpy(d.weekly_dividend_income);
+  document.getElementById('goodCount').textContent = `Good ${d.good_count}`;
+  document.getElementById('watchCount').textContent = `Watch ${d.watch_count}`;
+  document.getElementById('reviewCount').textContent = `要検討 ${d.review_count}`;
+
+  // ベンチマークテーブル
+  const benchHtml = (d.benchmarks || []).map(b =>
+    `<tr><td>${b.name}</td><td class="text-end">${fmtReturn(b.week_return_pct)}</td></tr>`
+  ).join('');
+  // ポートフォリオ行を追加
+  const pfRow = `<tr class="table-info"><td><strong>ポートフォリオ</strong></td><td class="text-end"><strong>${fmtReturn(d.portfolio_week_return_pct)}</strong></td></tr>`;
+  document.getElementById('benchmarkTable').innerHTML = benchHtml + pfRow;
+
+  // 保有銘柄リターン
+  document.getElementById('holdingsReturnTable').innerHTML = (d.holdings_perf || []).map(h =>
+    `<tr>
+      <td><strong>${h.ticker_symbol}</strong><br><small class="text-muted">${h.security_name}</small></td>
+      <td class="text-end">${fmtReturn(h.week_return_pct)}</td>
+      <td class="text-end">${h.weight_pct?.toFixed(1) ?? '--'}%</td>
+      <td class="text-end">${fmtReturn(h.unrealized_pnl_pct)}</td>
+      <td class="text-center"><span class="badge quality-${h.quality_label}">${h.quality_label}</span></td>
+    </tr>`
+  ).join('');
+
+  // 品質テーブル
+  document.getElementById('qualityTable').innerHTML = (d.holdings_perf || []).map(h =>
+    `<tr>
+      <td><strong>${h.ticker_symbol}</strong></td>
+      <td class="text-end">${h.pe_ratio ?? '-'}</td>
+      <td class="text-end">${h.pb_ratio ?? '-'}</td>
+      <td class="text-end">${h.profit_margin != null ? (h.profit_margin * 100).toFixed(1) + '%' : '-'}</td>
+      <td class="text-center"><span class="badge quality-${h.quality_label}">${h.quality_label}</span></td>
+      <td><small>${(h.quality_reasons || []).join(' / ')}</small></td>
+    </tr>`
+  ).join('');
+
+  document.getElementById('reviewContent').classList.remove('d-none');
+}
+
+// ── 入替提案 ──────────────────────────────────────────────────
+async function loadAdvisorData() {
+  showLoading('replace', true);
+  document.getElementById('replaceContent').classList.add('d-none');
+  try {
+    const res = await fetch('/advisor/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({}),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error);
+    advisorData = json.data;
+    renderAdvisor(advisorData);
+  } catch(e) {
+    showError('replaceContent', `入替提案の取得に失敗しました: ${e.message}`);
+  } finally {
+    showLoading('replace', false);
+  }
+}
+
+function renderAdvisor(d) {
+  // 警告バナー
+  if (d.warnings && d.warnings.length > 0) {
+    const html = d.warnings.map(w => `<div class="alert alert-warning py-2 mb-1">${w}</div>`).join('');
+    document.getElementById('warningBanner').innerHTML = html;
+    document.getElementById('warningBanner').classList.remove('d-none');
+  }
+
+  // スクリーナー鮮度
+  const bar = document.getElementById('screenerFreshnessBar');
+  if (d.screener_available && d.screener_last_run_at) {
+    bar.className = 'alert alert-success mb-3';
+    bar.innerHTML = `<i class="bi bi-check-circle"></i> スクリーナーデータ有効（最終実行: ${d.screener_last_run_at.slice(0,16)}）`;
+  } else {
+    bar.className = 'alert alert-warning mb-3 screener-stale';
+    bar.innerHTML = `<i class="bi bi-exclamation-triangle"></i> スクリーナーデータが古いか利用不可。stock_analyzerを実行してください。`;
+  }
+
+  // 売却候補
+  const sells = d.sell_candidates || [];
+  if (sells.length > 0) {
+    document.getElementById('sellCandidateTable').innerHTML = sells.map(s =>
+      `<tr>
+        <td><strong>${s.ticker_symbol}</strong><br><small class="text-muted">${s.security_name}</small></td>
+        <td class="text-end">${scoreBar(s.effective_score)}</td>
+        <td class="text-end">${fmtReturn(s.unrealized_pnl_pct)}</td>
+        <td><small>${s.reason}</small></td>
+        <td><small class="text-muted">${s.tax_consideration}</small></td>
+      </tr>`
+    ).join('');
+    document.getElementById('noSellMsg').classList.add('d-none');
+  } else {
+    document.getElementById('sellCandidateTable').innerHTML = '';
+    document.getElementById('noSellMsg').classList.remove('d-none');
+  }
+
+  // 購入候補
+  const buys = d.buy_candidates || [];
+  if (buys.length > 0) {
+    document.getElementById('buyCandidateTable').innerHTML = buys.map(b =>
+      `<tr>
+        <td><strong>${b.ticker_symbol}</strong><br><small class="text-muted">${b.company_name}</small></td>
+        <td class="text-center"><span class="badge grade-badge-${b.recommendation_grade}">${b.recommendation_grade}</span></td>
+        <td class="text-end">${scoreBar(b.composite_score)}</td>
+        <td>${b.entry_price_range || '-'}</td>
+        <td><small>${truncate(b.investment_thesis, 80)}</small></td>
+        <td><small class="text-muted">${b.preset_name || '-'}</small></td>
+      </tr>`
+    ).join('');
+    document.getElementById('noBuyMsg').classList.add('d-none');
+  } else {
+    document.getElementById('buyCandidateTable').innerHTML = '';
+    document.getElementById('noBuyMsg').classList.remove('d-none');
+  }
+
+  // 入替提案カード
+  const proposals = d.replacement_proposals || [];
+  if (proposals.length > 0) {
+    document.getElementById('proposalCards').innerHTML = proposals.map((p, i) =>
+      `<div class="card card-proposal mb-3">
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-3 mb-2">
+            <div class="text-center">
+              <div class="fw-bold">${p.sell_ticker}</div>
+              <div class="small text-muted">${p.sell_name}</div>
+              <div class="badge bg-danger mt-1">スコア ${p.sell_score?.toFixed(0)}</div>
+            </div>
+            <div class="arrow-icon"><i class="bi bi-arrow-right"></i></div>
+            <div class="text-center">
+              <div class="fw-bold">${p.buy_ticker}</div>
+              <div class="small text-muted">${p.buy_name}</div>
+              <div class="badge grade-badge-${p.buy_grade} mt-1">${p.buy_grade} スコア ${p.buy_score?.toFixed(0)}</div>
+            </div>
+            <div class="ms-auto text-end">
+              <div class="text-success fw-bold">+${p.score_improvement?.toFixed(1)} pts</div>
+              <div class="small text-muted">スコア改善</div>
+            </div>
+          </div>
+          <p class="small mb-1">${p.rationale}</p>
+          ${p.sell_unrealized_pct > 5 ? `<div class="alert alert-warning py-1 small mb-0"><i class="bi bi-exclamation-triangle"></i> ${p.sell_tax}</div>` : ''}
+          ${p.buy_entry_range ? `<div class="small text-muted mt-1">エントリー価格帯: ${p.buy_entry_range}</div>` : ''}
+        </div>
+      </div>`
+    ).join('');
+    document.getElementById('noProposalMsg').classList.add('d-none');
+  } else {
+    document.getElementById('proposalCards').innerHTML = '';
+    document.getElementById('noProposalMsg').classList.remove('d-none');
+  }
+
+  document.getElementById('replaceContent').classList.remove('d-none');
+}
+
+// ── 余剰現金投資 ──────────────────────────────────────────────
+async function loadCashProposals() {
+  const cashVal = parseFloat(document.getElementById('cashInput').value);
+  if (!cashVal || cashVal <= 0) {
+    alert('余剰現金額を入力してください');
+    return;
+  }
+
+  showLoading('cash', true);
+  document.getElementById('cashContent').classList.add('d-none');
+  try {
+    const res = await fetch('/advisor/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ cash_jpy: cashVal }),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error);
+    const d = json.data;
+
+    const proposals = d.cash_proposals || [];
+    const totalInvested = proposals.reduce((s, p) => s + p.suggested_amount_jpy, 0);
+
+    document.getElementById('cashSummInput').textContent = fmtJpy(cashVal);
+    document.getElementById('cashSummTotal').textContent = fmtJpy(totalInvested);
+    document.getElementById('cashSummRemain').innerHTML = fmtPnl(d.remaining_cash_jpy || 0);
+
+    if (proposals.length > 0) {
+      document.getElementById('cashProposalTable').innerHTML = proposals.map(c =>
+        `<tr ${c.max_position_warning ? 'class="table-warning"' : ''}>
+          <td>
+            <strong>${c.ticker_symbol}</strong>
+            ${c.max_position_warning ? '<span class="badge bg-warning text-dark ms-1">10%上限</span>' : ''}
+            <br><small class="text-muted">${c.company_name}</small>
+          </td>
+          <td class="text-center"><span class="badge grade-badge-${c.recommendation_grade}">${c.recommendation_grade}</span></td>
+          <td class="text-end">${c.composite_score?.toFixed(0) ?? '-'}</td>
+          <td>${c.entry_price_range || '-'}</td>
+          <td class="text-end fw-bold text-success">${fmtJpy(c.suggested_amount_jpy)}</td>
+          <td class="text-end">${c.suggested_quantity > 0 ? c.suggested_quantity + '株' : '要確認'}</td>
+          <td class="text-end">${c.position_pct_after?.toFixed(1)}%</td>
+          <td><small>${truncate(c.investment_thesis, 80)}</small></td>
+        </tr>`
+      ).join('');
+      document.getElementById('noCashMsg').classList.add('d-none');
+    } else {
+      document.getElementById('cashProposalTable').innerHTML = '';
+      document.getElementById('noCashMsg').classList.remove('d-none');
+    }
+
+    document.getElementById('cashContent').classList.remove('d-none');
+  } catch(e) {
+    showError('cashContent', `計算に失敗しました: ${e.message}`);
+  } finally {
+    showLoading('cash', false);
+  }
+}
+
+// ── ユーティリティ ───────────────────────────────────────────
+function fmtReturn(v) {
+  if (v == null) return '<span class="text-muted">--</span>';
+  const cls = v > 0 ? 'return-positive' : v < 0 ? 'return-negative' : '';
+  const sign = v > 0 ? '+' : '';
+  return `<span class="${cls}">${sign}${v.toFixed(2)}%</span>`;
+}
+function fmtJpy(v) {
+  if (v == null) return '--';
+  return '¥' + Math.round(v).toLocaleString();
+}
+function fmtPnl(v) {
+  if (v == null) return '--';
+  const cls = v > 0 ? 'text-success' : v < 0 ? 'text-danger' : '';
+  const sign = v > 0 ? '+' : '';
+  return `<span class="${cls}">${sign}¥${Math.round(v).toLocaleString()}</span>`;
+}
+function scoreBar(score) {
+  if (score == null) return '--';
+  const color = score >= 70 ? '#198754' : score >= 55 ? '#ffc107' : '#dc3545';
+  return `<div class="d-flex align-items-center gap-1 justify-content-end">
+    <div class="score-bar-wrap" style="width:60px">
+      <div class="score-bar" style="width:${score}%;background:${color}"></div>
+    </div>
+    <span>${score.toFixed(0)}</span>
+  </div>`;
+}
+function truncate(s, n) {
+  if (!s) return '-';
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+function showLoading(tab, show) {
+  document.getElementById(`${tab}Loading`).style.display = show ? 'block' : 'none';
+}
+function showError(contentId, msg) {
+  const el = document.getElementById(contentId);
+  el.innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+  el.classList.remove('d-none');
+}
+</script>
+{% endblock %}

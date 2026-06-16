@@ -11,22 +11,23 @@ sys.path.insert(0, str(project_root))
 from app import create_app, db
 from flask_migrate import init, migrate, upgrade
 
+
 def init_database():
     """Initialize database with migrations"""
     print("Starting database initialization...")
 
-    app = create_app('development')
+    app = create_app("development")
 
     with app.app_context():
         # Check if versions directory exists
-        versions_dir = project_root / 'migrations' / 'versions'
+        versions_dir = project_root / "migrations" / "versions"
 
         if not versions_dir.exists():
             print(f"Creating versions directory: {versions_dir}")
             versions_dir.mkdir(parents=True, exist_ok=True)
 
         # Check if any migration files exist
-        migration_files = list(versions_dir.glob('*.py'))
+        migration_files = list(versions_dir.glob("*.py"))
 
         if not migration_files:
             print("\nNo migration files found. Creating initial migration...")
@@ -34,12 +35,17 @@ def init_database():
             # Create initial migration
             try:
                 from flask_migrate import Migrate
+
                 migrate_obj = Migrate(app, db)
 
                 # Import all models to ensure they're registered
                 from app.models import (
-                    Transaction, Holding, Dividend,
-                    StockPrice, RealizedPnl, StockMetrics
+                    Transaction,
+                    Holding,
+                    Dividend,
+                    StockPrice,
+                    RealizedPnl,
+                    StockMetrics,
                 )
 
                 print("All models imported successfully")
@@ -58,6 +64,7 @@ def init_database():
             except Exception as e:
                 print(f"Error creating migration: {e}")
                 import traceback
+
                 traceback.print_exc()
                 return False
         else:
@@ -66,17 +73,19 @@ def init_database():
         # Apply migrations
         print("\nApplying migrations to database...")
         try:
-            os.system('flask db upgrade')
+            os.system("flask db upgrade")
             print("Database migrations applied successfully!")
         except Exception as e:
             print(f"Error applying migrations: {e}")
             import traceback
+
             traceback.print_exc()
             return False
 
         # Verify tables were created
         print("\nVerifying database tables...")
         from sqlalchemy import inspect
+
         inspector = inspect(db.engine)
         tables = inspector.get_table_names()
 
@@ -84,8 +93,14 @@ def init_database():
         for table in tables:
             print(f"  - {table}")
 
-        expected_tables = ['transactions', 'holdings', 'dividends',
-                          'stock_prices', 'realized_pnl', 'stock_metrics']
+        expected_tables = [
+            "transactions",
+            "holdings",
+            "dividends",
+            "stock_prices",
+            "realized_pnl",
+            "stock_metrics",
+        ]
         missing_tables = [t for t in expected_tables if t not in tables]
 
         if missing_tables:
@@ -95,16 +110,17 @@ def init_database():
             print("\nAll expected tables exist!")
             return True
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     success = init_database()
 
     if success:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Database initialization completed successfully!")
-        print("="*60)
+        print("=" * 60)
         sys.exit(0)
     else:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Database initialization failed!")
-        print("="*60)
+        print("=" * 60)
         sys.exit(1)

@@ -31,7 +31,7 @@ def confirm_restore():
     print()
 
     response = input("本当に復元を実行しますか? (yes/no): ").lower()
-    return response in ['yes', 'y']
+    return response in ["yes", "y"]
 
 
 def backup_current_db(db_path):
@@ -40,8 +40,8 @@ def backup_current_db(db_path):
         print("[INFO] 現在のデータベースが存在しないため、バックアップをスキップします")
         return None
 
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    backup_dir = Path('backups')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_dir = Path("backups")
     backup_dir.mkdir(parents=True, exist_ok=True)
 
     backup_filename = f"stock_pnl_pre_restore_{timestamp}.db"
@@ -81,11 +81,11 @@ def restore_database(backup_file, db_path, skip_backup=False):
         print(f"[INFO] データベース復元中: {backup_file}")
 
         # 圧縮されているか確認
-        if backup_file.suffix == '.gz':
+        if backup_file.suffix == ".gz":
             # gzip圧縮されている場合
             print("[INFO] 圧縮ファイルを展開中...")
-            with gzip.open(backup_file, 'rb') as f_in:
-                with open(db_path, 'wb') as f_out:
+            with gzip.open(backup_file, "rb") as f_in:
+                with open(db_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
         else:
             # 通常のファイル
@@ -118,7 +118,7 @@ def verify_database(db_path):
         cursor.execute("PRAGMA integrity_check")
         result = cursor.fetchone()
 
-        if result[0] == 'ok':
+        if result[0] == "ok":
             print("[SUCCESS] データベースの整合性チェック: OK")
 
             # テーブル数を確認
@@ -127,7 +127,7 @@ def verify_database(db_path):
             print(f"[INFO] テーブル数: {table_count}")
 
             # 主要テーブルのレコード数を確認
-            tables = ['transactions', 'holdings', 'realized_pnls', 'dividends']
+            tables = ["transactions", "holdings", "realized_pnls", "dividends"]
             for table in tables:
                 try:
                     cursor.execute(f"SELECT COUNT(*) FROM {table}")
@@ -148,7 +148,7 @@ def verify_database(db_path):
         return False
 
 
-def list_available_backups(backup_dir='backups'):
+def list_available_backups(backup_dir="backups"):
     """利用可能なバックアップ一覧を表示"""
     backup_dir = Path(backup_dir)
 
@@ -159,7 +159,7 @@ def list_available_backups(backup_dir='backups'):
     backups = sorted(
         backup_dir.glob("stock_pnl_*.db*"),
         key=lambda x: x.stat().st_mtime,
-        reverse=True
+        reverse=True,
     )
 
     if not backups:
@@ -185,7 +185,7 @@ def list_available_backups(backup_dir='backups'):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stock P&L Manager データベースリストアツール',
+        description="Stock P&L Manager データベースリストアツール",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用例:
@@ -200,43 +200,31 @@ def main():
 
     # 復元前のバックアップをスキップ
     python scripts/restore_database.py backups/stock_pnl_20260111_030000.db --no-backup --force
-        """
+        """,
     )
 
     parser.add_argument(
-        'backup_file',
-        nargs='?',
-        help='リストアするバックアップファイル'
+        "backup_file", nargs="?", help="リストアするバックアップファイル"
     )
 
     parser.add_argument(
-        '--db-path',
-        default='data/stock_pnl.db',
-        help='データベースファイルのパス（デフォルト: data/stock_pnl.db）'
+        "--db-path",
+        default="data/stock_pnl.db",
+        help="データベースファイルのパス（デフォルト: data/stock_pnl.db）",
+    )
+
+    parser.add_argument("--force", action="store_true", help="確認なしで実行")
+
+    parser.add_argument(
+        "--no-backup", action="store_true", help="復元前の自動バックアップをスキップ"
     )
 
     parser.add_argument(
-        '--force',
-        action='store_true',
-        help='確認なしで実行'
+        "--list", action="store_true", help="利用可能なバックアップ一覧を表示"
     )
 
     parser.add_argument(
-        '--no-backup',
-        action='store_true',
-        help='復元前の自動バックアップをスキップ'
-    )
-
-    parser.add_argument(
-        '--list',
-        action='store_true',
-        help='利用可能なバックアップ一覧を表示'
-    )
-
-    parser.add_argument(
-        '--verify',
-        action='store_true',
-        help='復元後にデータベースの整合性を確認'
+        "--verify", action="store_true", help="復元後にデータベースの整合性を確認"
     )
 
     args = parser.parse_args()
@@ -269,9 +257,7 @@ def main():
 
     # データベース復元
     success = restore_database(
-        args.backup_file,
-        args.db_path,
-        skip_backup=args.no_backup
+        args.backup_file, args.db_path, skip_backup=args.no_backup
     )
 
     if not success:
@@ -297,5 +283,5 @@ def main():
     print("[INFO] アプリケーションを再起動してください")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

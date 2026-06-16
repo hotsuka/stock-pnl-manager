@@ -169,9 +169,9 @@
     </div>
 
     <!-- サマリーカード -->
-    <div class="row mb-4" id="summary-cards">
+    <div class="row mb-4" id="summary-cards" style="display: flex; flex-wrap: wrap;">
         <!-- 1. 投資実績銘柄数 -->
-        <div class="col-md-3 col-sm-6 mb-3">
+        <div class="col-sm-6 mb-3" style="flex: 0 0 20%; max-width: 20%;">
             <div class="summary-card">
                 <h3>投資実績銘柄数</h3>
                 <div class="value" id="summary-tickers-total">-</div>
@@ -182,7 +182,7 @@
             </div>
         </div>
         <!-- 2. 総投資額 -->
-        <div class="col-md-3 col-sm-6 mb-3">
+        <div class="col-sm-6 mb-3" style="flex: 0 0 20%; max-width: 20%;">
             <div class="summary-card">
                 <h3>総投資額</h3>
                 <div class="value" id="summary-investment-total">-</div>
@@ -193,7 +193,7 @@
             </div>
         </div>
         <!-- 3. 総評価額 -->
-        <div class="col-md-3 col-sm-6 mb-3">
+        <div class="col-sm-6 mb-3" style="flex: 0 0 20%; max-width: 20%;">
             <div class="summary-card">
                 <h3>総評価額</h3>
                 <div class="value" id="summary-evaluation-total">-</div>
@@ -205,13 +205,27 @@
             </div>
         </div>
         <!-- 4. 総合損益 -->
-        <div class="col-md-3 col-sm-6 mb-3">
+        <div class="col-sm-6 mb-3" style="flex: 0 0 20%; max-width: 20%;">
             <div class="summary-card">
                 <h3>総合損益</h3>
                 <div class="value" id="summary-pnl-amount">-</div>
                 <div class="change" id="summary-pnl-percentage">-</div>
-                <div class="summary-details text-muted" style="border: none;">
-                    (総評価額 - 総投資額)
+                <div class="summary-details">
+                    <div><span>確定損益</span><span id="summary-pnl-realized">-</span></div>
+                    <div><span>含み損益</span><span id="summary-pnl-unrealized">-</span></div>
+                    <div><span>配当</span><span id="summary-pnl-dividends">-</span></div>
+                </div>
+            </div>
+        </div>
+        <!-- 5. 年初来損益 -->
+        <div class="col-sm-6 mb-3" style="flex: 0 0 20%; max-width: 20%;">
+            <div class="summary-card">
+                <h3>年初来損益</h3>
+                <div class="value" id="summary-ytd-total">-</div>
+                <div class="summary-details">
+                    <div><span>確定損益</span><span id="summary-ytd-realized">-</span></div>
+                    <div><span>含み損益</span><span id="summary-ytd-unrealized">-</span></div>
+                    <div><span>配当</span><span id="summary-ytd-dividends">-</span></div>
                 </div>
             </div>
         </div>
@@ -414,6 +428,32 @@
         const pnlPctElement = document.getElementById('summary-pnl-percentage');
         pnlPctElement.textContent = formatPercentage(pnlPct);
         pnlPctElement.className = 'change ' + (pnl >= 0 ? 'positive' : 'negative');
+
+        const setPnlDetail = (id, val) => {
+            const el = document.getElementById(id);
+            el.textContent = (val >= 0 ? '+' : '') + formatCurrency(val) + ' 円';
+            el.className = val >= 0 ? 'positive' : 'negative';
+        };
+        setPnlDetail('summary-pnl-realized', summary.evaluation.realized - summary.investment.realized);
+        setPnlDetail('summary-pnl-unrealized', summary.evaluation.holdings - summary.investment.holdings);
+        setPnlDetail('summary-pnl-dividends', summary.evaluation.dividends);
+
+        // 5. 年初来損益
+        if (summary.ytd_pnl) {
+            const ytd = summary.ytd_pnl;
+            const ytdEl = document.getElementById('summary-ytd-total');
+            ytdEl.textContent = (ytd.total >= 0 ? '+' : '') + formatCurrency(ytd.total);
+            ytdEl.className = 'value ' + (ytd.total >= 0 ? 'positive' : 'negative');
+
+            const setYtdDetail = (id, val) => {
+                const el = document.getElementById(id);
+                el.textContent = (val >= 0 ? '+' : '') + formatCurrency(val) + ' 円';
+                el.className = val >= 0 ? 'positive' : 'negative';
+            };
+            setYtdDetail('summary-ytd-realized', ytd.realized);
+            setYtdDetail('summary-ytd-unrealized', ytd.holding);
+            setYtdDetail('summary-ytd-dividends', ytd.dividends);
+        }
     }
 
     // 為替レートの読み込み

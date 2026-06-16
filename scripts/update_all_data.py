@@ -29,11 +29,7 @@ load_dotenv()
 
 from app import create_app, db
 from app.models import Holding
-from app.services import (
-    StockPriceFetcher,
-    DividendFetcher,
-    StockMetricsFetcher
-)
+from app.services import StockPriceFetcher, DividendFetcher, StockMetricsFetcher
 from app.services.benchmark_fetcher import BenchmarkFetcher
 
 
@@ -48,7 +44,7 @@ def update_stock_prices():
 
     if not holdings:
         print("[INFO] 保有銘柄がありません")
-        return {'success': 0, 'failed': 0}
+        return {"success": 0, "failed": 0}
 
     print(f"[INFO] {len(holdings)}銘柄の株価を更新します...")
 
@@ -61,29 +57,31 @@ def update_stock_prices():
 
             # 株価取得
             price_data = StockPriceFetcher.get_current_price(
-                holding.ticker_symbol,
-                use_cache=False
+                holding.ticker_symbol, use_cache=False
             )
 
             if price_data:
                 # 為替レート（外国株の場合）
                 exchange_rate = 1.0
-                if holding.currency == 'USD':
+                if holding.currency == "USD":
                     from app.services.exchange_rate_fetcher import ExchangeRateFetcher
-                    rate_data = ExchangeRateFetcher.get_rate('USD', 'JPY')
+
+                    rate_data = ExchangeRateFetcher.get_rate("USD", "JPY")
                     if rate_data:
-                        exchange_rate = rate_data.get('rate', 1.0)
+                        exchange_rate = rate_data.get("rate", 1.0)
 
                 # 保有銘柄の株価を更新
                 holding.update_current_price(
-                    price_data.get('current_price'),
+                    price_data.get("current_price"),
                     exchange_rate=exchange_rate,
-                    previous_close=price_data.get('previous_close')
+                    previous_close=price_data.get("previous_close"),
                 )
 
                 db.session.commit()
 
-                print(f"[SUCCESS] {holding.ticker_symbol}: ¥{holding.current_price:,.2f}")
+                print(
+                    f"[SUCCESS] {holding.ticker_symbol}: ¥{holding.current_price:,.2f}"
+                )
                 success_count += 1
             else:
                 print(f"[WARNING] {holding.ticker_symbol}: 株価取得失敗")
@@ -97,7 +95,7 @@ def update_stock_prices():
     print()
     print(f"[INFO] 株価更新完了: 成功={success_count}, 失敗={failed_count}")
 
-    return {'success': success_count, 'failed': failed_count}
+    return {"success": success_count, "failed": failed_count}
 
 
 def update_dividends():
@@ -111,7 +109,7 @@ def update_dividends():
 
     if not holdings:
         print("[INFO] 保有銘柄がありません")
-        return {'success': 0, 'failed': 0}
+        return {"success": 0, "failed": 0}
 
     print(f"[INFO] {len(holdings)}銘柄の配当データを更新します...")
 
@@ -125,7 +123,9 @@ def update_dividends():
             dividends = DividendFetcher.fetch_dividends(holding.ticker_symbol)
 
             if dividends:
-                print(f"[SUCCESS] {holding.ticker_symbol}: {len(dividends)}件の配当データ")
+                print(
+                    f"[SUCCESS] {holding.ticker_symbol}: {len(dividends)}件の配当データ"
+                )
                 success_count += 1
             else:
                 print(f"[INFO] {holding.ticker_symbol}: 配当データなし")
@@ -137,7 +137,7 @@ def update_dividends():
     print()
     print(f"[INFO] 配当データ更新完了: 成功={success_count}, 失敗={failed_count}")
 
-    return {'success': success_count, 'failed': failed_count}
+    return {"success": success_count, "failed": failed_count}
 
 
 def update_stock_metrics():
@@ -151,13 +151,15 @@ def update_stock_metrics():
         results = StockMetricsFetcher.update_all_holdings_metrics()
 
         print()
-        print(f"[INFO] 評価指標更新完了: 成功={results['success']}, 失敗={results['failed']}")
+        print(
+            f"[INFO] 評価指標更新完了: 成功={results['success']}, 失敗={results['failed']}"
+        )
 
         return results
 
     except Exception as e:
         print(f"[ERROR] 評価指標更新エラー: {str(e)}")
-        return {'success': 0, 'failed': 0}
+        return {"success": 0, "failed": 0}
 
 
 def update_benchmarks():
@@ -167,10 +169,7 @@ def update_benchmarks():
     print("ベンチマーク価格更新")
     print("=" * 60)
 
-    benchmarks = [
-        ('^N225', '日経平均株価'),
-        ('^GSPC', 'S&P 500')
-    ]
+    benchmarks = [("^N225", "日経平均株価"), ("^GSPC", "S&P 500")]
 
     success_count = 0
     failed_count = 0
@@ -198,12 +197,12 @@ def update_benchmarks():
     print()
     print(f"[INFO] ベンチマーク更新完了: 成功={success_count}, 失敗={failed_count}")
 
-    return {'success': success_count, 'failed': failed_count}
+    return {"success": success_count, "failed": failed_count}
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stock P&L Manager 全データ更新ツール',
+        description="Stock P&L Manager 全データ更新ツール",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用例:
@@ -215,37 +214,27 @@ def main():
 
     # 配当と評価指標を更新
     python scripts/update_all_data.py --skip-prices --skip-benchmarks
-        """
+        """,
+    )
+
+    parser.add_argument("--skip-prices", action="store_true", help="株価更新をスキップ")
+
+    parser.add_argument(
+        "--skip-dividends", action="store_true", help="配当更新をスキップ"
     )
 
     parser.add_argument(
-        '--skip-prices',
-        action='store_true',
-        help='株価更新をスキップ'
+        "--skip-metrics", action="store_true", help="評価指標更新をスキップ"
     )
 
     parser.add_argument(
-        '--skip-dividends',
-        action='store_true',
-        help='配当更新をスキップ'
-    )
-
-    parser.add_argument(
-        '--skip-metrics',
-        action='store_true',
-        help='評価指標更新をスキップ'
-    )
-
-    parser.add_argument(
-        '--skip-benchmarks',
-        action='store_true',
-        help='ベンチマーク更新をスキップ'
+        "--skip-benchmarks", action="store_true", help="ベンチマーク更新をスキップ"
     )
 
     args = parser.parse_args()
 
     # Flaskアプリケーションコンテキストを作成
-    app = create_app(os.getenv('FLASK_ENV', 'development'))
+    app = create_app(os.getenv("FLASK_ENV", "development"))
 
     with app.app_context():
         print("=" * 60)
@@ -257,19 +246,19 @@ def main():
 
         # 株価更新
         if not args.skip_prices:
-            results['prices'] = update_stock_prices()
+            results["prices"] = update_stock_prices()
 
         # 配当更新
         if not args.skip_dividends:
-            results['dividends'] = update_dividends()
+            results["dividends"] = update_dividends()
 
         # 評価指標更新
         if not args.skip_metrics:
-            results['metrics'] = update_stock_metrics()
+            results["metrics"] = update_stock_metrics()
 
         # ベンチマーク更新
         if not args.skip_benchmarks:
-            results['benchmarks'] = update_benchmarks()
+            results["benchmarks"] = update_benchmarks()
 
         # 結果サマリー
         print()
@@ -277,12 +266,14 @@ def main():
         print("更新結果サマリー")
         print("=" * 60)
 
-        total_success = sum(r.get('success', 0) for r in results.values())
-        total_failed = sum(r.get('failed', 0) for r in results.values())
+        total_success = sum(r.get("success", 0) for r in results.values())
+        total_failed = sum(r.get("failed", 0) for r in results.values())
 
         for key, result in results.items():
             if result:
-                print(f"{key:15s}: 成功={result.get('success', 0):3d}, 失敗={result.get('failed', 0):3d}")
+                print(
+                    f"{key:15s}: 成功={result.get('success', 0):3d}, 失敗={result.get('failed', 0):3d}"
+                )
 
         print("-" * 60)
         print(f"{'合計':15s}: 成功={total_success:3d}, 失敗={total_failed:3d}")
@@ -294,5 +285,5 @@ def main():
             sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

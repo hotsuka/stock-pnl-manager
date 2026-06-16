@@ -46,7 +46,9 @@ def cleanup_logs(log_dir, keep_days, dry_run=False):
             total_size += file_size
 
             if dry_run:
-                print(f"[DRY-RUN] 削除対象: {log_file.name} ({file_size / 1024:.2f} KB)")
+                print(
+                    f"[DRY-RUN] 削除対象: {log_file.name} ({file_size / 1024:.2f} KB)"
+                )
             else:
                 try:
                     log_file.unlink()
@@ -74,10 +76,14 @@ def cleanup_logs(log_dir, keep_days, dry_run=False):
                     print(f"[WARNING] 削除失敗 ({gz_file.name}): {str(e)}")
 
     if dry_run:
-        print(f"[DRY-RUN] 削除対象: {deleted_count}ファイル, {total_size / (1024 * 1024):.2f} MB")
+        print(
+            f"[DRY-RUN] 削除対象: {deleted_count}ファイル, {total_size / (1024 * 1024):.2f} MB"
+        )
     else:
         if deleted_count > 0:
-            print(f"[SUCCESS] {deleted_count}個のログファイルを削除 ({total_size / (1024 * 1024):.2f} MB解放)")
+            print(
+                f"[SUCCESS] {deleted_count}個のログファイルを削除 ({total_size / (1024 * 1024):.2f} MB解放)"
+            )
         else:
             print("[INFO] 削除対象のログファイルはありませんでした")
 
@@ -106,20 +112,28 @@ def cleanup_old_backups(backup_dir, keep_days, dry_run=False):
             total_size += file_size
 
             if dry_run:
-                print(f"[DRY-RUN] 削除対象: {backup_file.name} ({file_size / (1024 * 1024):.2f} MB)")
+                print(
+                    f"[DRY-RUN] 削除対象: {backup_file.name} ({file_size / (1024 * 1024):.2f} MB)"
+                )
             else:
                 try:
                     backup_file.unlink()
-                    print(f"[INFO] 削除: {backup_file.name} ({file_size / (1024 * 1024):.2f} MB)")
+                    print(
+                        f"[INFO] 削除: {backup_file.name} ({file_size / (1024 * 1024):.2f} MB)"
+                    )
                     deleted_count += 1
                 except Exception as e:
                     print(f"[WARNING] 削除失敗 ({backup_file.name}): {str(e)}")
 
     if dry_run:
-        print(f"[DRY-RUN] 削除対象: {deleted_count}ファイル, {total_size / (1024 * 1024):.2f} MB")
+        print(
+            f"[DRY-RUN] 削除対象: {deleted_count}ファイル, {total_size / (1024 * 1024):.2f} MB"
+        )
     else:
         if deleted_count > 0:
-            print(f"[SUCCESS] {deleted_count}個のバックアップを削除 ({total_size / (1024 * 1024):.2f} MB解放)")
+            print(
+                f"[SUCCESS] {deleted_count}個のバックアップを削除 ({total_size / (1024 * 1024):.2f} MB解放)"
+            )
         else:
             print("[INFO] 削除対象のバックアップファイルはありませんでした")
 
@@ -141,7 +155,7 @@ def cleanup_uploads(upload_dir, dry_run=False):
 
     for csv_file in upload_dir.glob("*.csv"):
         # .gitkeepは除外
-        if csv_file.name == '.gitkeep':
+        if csv_file.name == ".gitkeep":
             continue
 
         file_size = csv_file.stat().st_size
@@ -158,10 +172,14 @@ def cleanup_uploads(upload_dir, dry_run=False):
                 print(f"[WARNING] 削除失敗 ({csv_file.name}): {str(e)}")
 
     if dry_run:
-        print(f"[DRY-RUN] 削除対象: {deleted_count}ファイル, {total_size / 1024:.2f} KB")
+        print(
+            f"[DRY-RUN] 削除対象: {deleted_count}ファイル, {total_size / 1024:.2f} KB"
+        )
     else:
         if deleted_count > 0:
-            print(f"[SUCCESS] {deleted_count}個のCSVファイルを削除 ({total_size / 1024:.2f} KB解放)")
+            print(
+                f"[SUCCESS] {deleted_count}個のCSVファイルを削除 ({total_size / 1024:.2f} KB解放)"
+            )
         else:
             print("[INFO] 削除対象のCSVファイルはありませんでした")
 
@@ -193,20 +211,28 @@ def cleanup_cache(cache_dir, keep_days, dry_run=False):
             total_size += file_size
 
             if dry_run:
-                print(f"[DRY-RUN] 削除対象: {cache_file.relative_to(cache_dir)} ({file_size / 1024:.2f} KB)")
+                print(
+                    f"[DRY-RUN] 削除対象: {cache_file.relative_to(cache_dir)} ({file_size / 1024:.2f} KB)"
+                )
             else:
                 try:
                     cache_file.unlink()
-                    print(f"[INFO] 削除: {cache_file.relative_to(cache_dir)} ({file_size / 1024:.2f} KB)")
+                    print(
+                        f"[INFO] 削除: {cache_file.relative_to(cache_dir)} ({file_size / 1024:.2f} KB)"
+                    )
                     deleted_count += 1
                 except Exception as e:
                     print(f"[WARNING] 削除失敗 ({cache_file.name}): {str(e)}")
 
     if dry_run:
-        print(f"[DRY-RUN] 削除対象: {deleted_count}ファイル, {total_size / 1024:.2f} KB")
+        print(
+            f"[DRY-RUN] 削除対象: {deleted_count}ファイル, {total_size / 1024:.2f} KB"
+        )
     else:
         if deleted_count > 0:
-            print(f"[SUCCESS] {deleted_count}個のキャッシュファイルを削除 ({total_size / 1024:.2f} KB解放)")
+            print(
+                f"[SUCCESS] {deleted_count}個のキャッシュファイルを削除 ({total_size / 1024:.2f} KB解放)"
+            )
         else:
             print("[INFO] 削除対象のキャッシュファイルはありませんでした")
 
@@ -223,6 +249,7 @@ def cleanup_pycache():
     for pycache_dir in project_root.rglob("__pycache__"):
         try:
             import shutil
+
             shutil.rmtree(pycache_dir)
             print(f"[INFO] 削除: {pycache_dir.relative_to(project_root)}")
             deleted_count += 1
@@ -239,7 +266,7 @@ def cleanup_pycache():
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stock P&L Manager データクリーンアップツール',
+        description="Stock P&L Manager データクリーンアップツール",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用例:
@@ -254,64 +281,56 @@ def main():
 
     # バックアップを90日保存
     python scripts/cleanup_old_data.py --backup-days 90
-        """
+        """,
     )
 
     parser.add_argument(
-        '--log-days',
+        "--log-days",
         type=int,
         default=30,
-        help='ログファイル保存期間（デフォルト: 30日）'
+        help="ログファイル保存期間（デフォルト: 30日）",
     )
 
     parser.add_argument(
-        '--backup-days',
+        "--backup-days",
         type=int,
         default=90,
-        help='バックアップ保存期間（デフォルト: 90日）'
+        help="バックアップ保存期間（デフォルト: 90日）",
     )
 
     parser.add_argument(
-        '--cache-days',
+        "--cache-days",
         type=int,
         default=7,
-        help='キャッシュ保存期間（デフォルト: 7日）'
+        help="キャッシュ保存期間（デフォルト: 7日）",
     )
 
     parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='実際には削除せずに表示のみ'
+        "--dry-run", action="store_true", help="実際には削除せずに表示のみ"
     )
 
     parser.add_argument(
-        '--skip-logs',
-        action='store_true',
-        help='ログクリーンアップをスキップ'
+        "--skip-logs", action="store_true", help="ログクリーンアップをスキップ"
     )
 
     parser.add_argument(
-        '--skip-backups',
-        action='store_true',
-        help='バックアップクリーンアップをスキップ'
+        "--skip-backups",
+        action="store_true",
+        help="バックアップクリーンアップをスキップ",
     )
 
     parser.add_argument(
-        '--skip-uploads',
-        action='store_true',
-        help='アップロードファイルクリーンアップをスキップ'
+        "--skip-uploads",
+        action="store_true",
+        help="アップロードファイルクリーンアップをスキップ",
     )
 
     parser.add_argument(
-        '--skip-cache',
-        action='store_true',
-        help='キャッシュクリーンアップをスキップ'
+        "--skip-cache", action="store_true", help="キャッシュクリーンアップをスキップ"
     )
 
     parser.add_argument(
-        '--cleanup-pycache',
-        action='store_true',
-        help='__pycache__ディレクトリを削除'
+        "--cleanup-pycache", action="store_true", help="__pycache__ディレクトリを削除"
     )
 
     args = parser.parse_args()
@@ -333,28 +352,28 @@ def main():
     if not args.skip_logs:
         print()
         print("-" * 60)
-        deleted = cleanup_logs('logs', args.log_days, dry_run=args.dry_run)
+        deleted = cleanup_logs("logs", args.log_days, dry_run=args.dry_run)
         total_deleted += deleted
 
     # バックアップクリーンアップ
     if not args.skip_backups:
         print()
         print("-" * 60)
-        deleted = cleanup_old_backups('backups', args.backup_days, dry_run=args.dry_run)
+        deleted = cleanup_old_backups("backups", args.backup_days, dry_run=args.dry_run)
         total_deleted += deleted
 
     # アップロードファイルクリーンアップ
     if not args.skip_uploads:
         print()
         print("-" * 60)
-        deleted = cleanup_uploads('data/uploads', dry_run=args.dry_run)
+        deleted = cleanup_uploads("data/uploads", dry_run=args.dry_run)
         total_deleted += deleted
 
     # キャッシュクリーンアップ
     if not args.skip_cache:
         print()
         print("-" * 60)
-        deleted = cleanup_cache('.cache', args.cache_days, dry_run=args.dry_run)
+        deleted = cleanup_cache(".cache", args.cache_days, dry_run=args.dry_run)
         total_deleted += deleted
 
     # __pycache__クリーンアップ
@@ -379,5 +398,5 @@ def main():
     print("=" * 60)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

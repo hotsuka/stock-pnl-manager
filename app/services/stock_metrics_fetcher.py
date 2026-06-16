@@ -10,6 +10,13 @@ import yfinance as yf
 
 from app import db
 from app.models import Holding, StockMetrics
+from app.services.sector_mapping import (
+    ETF_CATEGORY,
+    detect_etf,
+    detect_region,
+    fetch_edinet_industry,
+    normalize_to_gics,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger("stock_metrics_fetcher")
@@ -82,6 +89,15 @@ class StockMetricsFetcher:
             returns = StockMetricsFetcher._calculate_returns(stock)
             metrics_data["ytd_return"] = returns.get("ytd_return")
             metrics_data["one_year_return"] = returns.get("one_year_return")
+
+            # セクター情報の取得（GICS 統一）
+            sector_info = StockMetricsFetcher._fetch_sector_info(
+                ticker_symbol, info, info.get("longName") or info.get("shortName") or ""
+            )
+            metrics_data["sector"] = sector_info["sector"]
+            metrics_data["industry"] = sector_info["industry"]
+            metrics_data["region"] = sector_info["region"]
+            metrics_data["sector_source"] = sector_info["source"]
 
             # データベースに保存
             StockMetricsFetcher._save_metrics_to_db(ticker_symbol, metrics_data)
@@ -210,6 +226,72 @@ class StockMetricsFetcher:
         )
 
         return {"success": success_count, "failed": failed_count, "details": details}
+
+    @staticmethod
+    def _fetch_sector_info(ticker_symbol, info, security_name=""):
+        """セクター・業種・地域・取得元を判定する（GICS 統一）。
+
+        優先順位:
+        1. ETF 判定 → "Index/ETF" カテゴリ
+        2. yfinance.info.sector → 正規化 GICS
+        3. 日本株かつ yfinance で取れない場合 → EDINET MCP から industry を取得
+        4. それでも取れない場合は sector=None
+
+        Args:
+            ticker_symbol: ティッカー
+            info: yfinance.Ticker.info dict
+            security_name: 銘柄名（ETF判定用）
+
+        Returns:
+            dict: {sector, industry, region, source}
+        """
+        region = detect_region(ticker_symbol)
+
+        # 1. ETF 判定
+        if detect_etf(ticker_symbol, security_name):
+            return {
+                "sector": ETF_CATEGORY,
+                "industry": "ETF",
+                "region": region,
+                "source": "etf",
+            }
+
+        # 2. yfinance のセクター
+        raw_sector = info.get("sector")
+        raw_industry = info.get("industry")
+        if raw_sector:
+            gics = normalize_to_gics(raw_sector, source="yfinance")
+            if gics:
+                return {
+                    "sector": gics,
+                    "industry": raw_industry or "",
+                    "region": region,
+                    "source": "yfinance",
+                }
+
+        # 3. 日本株: EDINET フォールバック
+        if region == "JP":
+            try:
+                edinet_industry = fetch_edinet_industry(ticker_symbol)
+                if edinet_industry:
+                    gics = normalize_to_gics(edinet_industry, source="edinet")
+                    if gics:
+                        return {
+                            "sector": gics,
+                            "industry": edinet_industry,
+                            "region": region,
+                            "source": "edinet",
+                        }
+            except Exception as e:
+                logger.warning(f"EDINET セクター取得失敗 ({ticker_symbol}): {e}")
+
+        # 4. マッピング不能
+        return {
+            "sector": None,
+            "industry": raw_industry or "",
+            "region": region,
+            "source": "yfinance",
+        }
 
     @staticmethod
     def _save_metrics_to_db(ticker_symbol, metrics_data):

@@ -47,6 +47,12 @@ class StockMetrics(db.Model):
     ytd_return = db.Column(db.Numeric(10, 4))  # YTD Return（小数形式）
     one_year_return = db.Column(db.Numeric(10, 4))  # 1-Year Return（小数形式）
 
+    # セクター・業種情報（GICS統一）
+    sector = db.Column(db.String(50))  # GICS セクター名（例: "Information Technology"）
+    industry = db.Column(db.String(100))  # 詳細業種
+    region = db.Column(db.String(10))  # "US" / "JP" / "KR" / "OTHER"
+    sector_source = db.Column(db.String(20))  # "yfinance" / "edinet" / "manual" / "etf"
+
     # メタデータ
     currency = db.Column(db.String(3))  # 通貨コード
     last_updated = db.Column(db.DateTime)  # 最終更新日時
@@ -79,6 +85,10 @@ class StockMetrics(db.Model):
             "one_year_return": (
                 float(self.one_year_return) if self.one_year_return else None
             ),
+            "sector": self.sector,
+            "industry": self.industry,
+            "region": self.region,
+            "sector_source": self.sector_source,
             "currency": self.currency,
             "last_updated": (
                 self.last_updated.isoformat() if self.last_updated else None

@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import datetime
 from decimal import Decimal
 
@@ -34,17 +35,40 @@ class TransactionService:
             transactions_data, key=lambda x: x.get("transaction_date", "")
         )
 
+        # バッチ内の同一キー出現回数を事前集計
+        # SBI証券はPTS・東証など複数市場で同価格・同数量を分割執行することがあるため
+        # 「バッチにN件あれば、DBにもN件まで許容」というカウントベース重複チェックを行う
+        def _dup_key(d):
+            return (
+                d.get("transaction_date"),
+                d.get("ticker_symbol"),
+                d.get("quantity"),
+                d.get("unit_price"),
+            )
+
+        batch_counts = Counter(_dup_key(d) for d in sorted_data)
+
+        # バッチ開始前のDB件数をキーごとに取得（ループ中に変わらないよう先読み）
+        initial_db_counts = {
+            key: Transaction.query.filter_by(
+                transaction_date=key[0],
+                ticker_symbol=key[1],
+                quantity=key[2],
+                unit_price=key[3],
+            ).count()
+            for key in batch_counts
+        }
+
+        # バッチ内挿入済み件数トラッカー
+        inserted_in_batch: Counter = Counter()
+
         for data in sorted_data:
             try:
-                # 重複チェック
-                existing = Transaction.query.filter_by(
-                    transaction_date=data["transaction_date"],
-                    ticker_symbol=data["ticker_symbol"],
-                    quantity=data["quantity"],
-                    unit_price=data["unit_price"],
-                ).first()
+                key = _dup_key(data)
+                allowed_new = max(0, batch_counts[key] - initial_db_counts[key])
 
-                if existing:
+                # 重複チェック: このバッチで許容される新規件数を超えたらスキップ
+                if inserted_in_batch[key] >= allowed_new:
                     logger.warning(
                         f"重複取引をスキップ: {data.get('ticker_symbol')} {data.get('transaction_date')}"
                     )
@@ -62,6 +86,7 @@ class TransactionService:
                 TransactionService._update_holding(transaction)
 
                 db.session.commit()
+                inserted_in_batch[key] += 1
                 log_database_operation(
                     logger,
                     "INSERT",
@@ -89,14 +114,21 @@ class TransactionService:
 
         if transaction.transaction_type == "BUY":
             # 買付処理
-            # 受渡金額を使用（手数料込みの実際の支払額）
-            transaction_cost = (
+            # 受渡金額をJPYに換算（外国株の為替計算）
+            raw_cost = (
                 transaction.settlement_amount
                 if transaction.settlement_amount
                 else (
                     transaction.quantity * transaction.unit_price
                     + (transaction.commission or 0)
                 )
+            )
+            transaction_cost = TransactionService._to_jpy(
+                raw_cost,
+                transaction.currency,
+                transaction.exchange_rate,
+                transaction.transaction_date,
+                settlement_currency=transaction.settlement_currency,
             )
 
             if holding:
@@ -106,6 +138,7 @@ class TransactionService:
                 holding.average_cost = total_cost / total_quantity
                 holding.total_quantity = total_quantity
                 holding.total_cost = total_cost
+                holding.currency = transaction.currency
             else:
                 # 新規保有銘柄
                 holding = Holding(
@@ -131,8 +164,13 @@ class TransactionService:
                 )
 
             # 確定損益を計算 (JPYベース)
-            # transaction.settlement_amount は常に受渡金額 (JPY)
-            sell_proceeds_jpy = Decimal(str(transaction.settlement_amount or 0))
+            sell_proceeds_jpy = TransactionService._to_jpy(
+                transaction.settlement_amount,
+                transaction.currency,
+                transaction.exchange_rate,
+                transaction.transaction_date,
+                settlement_currency=transaction.settlement_currency,
+            )
             cost_basis_jpy = Decimal(str(holding.average_cost or 0)) * Decimal(
                 str(transaction.quantity or 0)
             )
@@ -160,10 +198,42 @@ class TransactionService:
             # 保有数量を減少
             holding.total_quantity -= transaction.quantity
             holding.total_cost = holding.total_quantity * holding.average_cost
+            holding.currency = transaction.currency
 
             # 保有数量が0になった場合は削除
             if holding.total_quantity == 0:
                 db.session.delete(holding)
+
+    @staticmethod
+    def _to_jpy(
+        amount, currency, exchange_rate, transaction_date, settlement_currency=None
+    ):
+        """
+        受渡金額をJPYに換算する。
+        settlement_currency でamountの通貨を判定し、JPYならそのまま返す。
+        settlement_currency が未指定の場合は currency で判定する。
+        """
+        if amount is None:
+            return Decimal("0")
+        amount_dec = Decimal(str(amount))
+        amount_currency = settlement_currency or currency
+        if amount_currency == "JPY":
+            return amount_dec
+
+        rate = exchange_rate
+        if rate is None:
+            from app.services.exchange_rate_fetcher import ExchangeRateFetcher
+
+            rate_data = ExchangeRateFetcher.get_historical_rate(
+                amount_currency, "JPY", transaction_date
+            )
+            if rate_data:
+                rate = rate_data["rate"]
+            else:
+                raise ValueError(
+                    f"為替レートを取得できません: {amount_currency}/JPY 約定日={transaction_date}"
+                )
+        return amount_dec * Decimal(str(rate))
 
     @staticmethod
     def check_duplicate(transaction_date, ticker_symbol, quantity, unit_price):
@@ -209,14 +279,21 @@ class TransactionService:
 
         for transaction in transactions:
             if transaction.transaction_type == "BUY":
-                # 受渡金額を使用（手数料込みの実際の支払額）
-                transaction_cost = (
+                # 受渡金額をJPYに換算（外国株の為替計算）
+                raw_cost = (
                     transaction.settlement_amount
                     if transaction.settlement_amount
                     else (
                         transaction.quantity * transaction.unit_price
                         + (transaction.commission or 0)
                     )
+                )
+                transaction_cost = TransactionService._to_jpy(
+                    raw_cost,
+                    transaction.currency,
+                    transaction.exchange_rate,
+                    transaction.transaction_date,
+                    settlement_currency=transaction.settlement_currency,
                 )
 
                 if current_holding:
@@ -228,6 +305,7 @@ class TransactionService:
                     current_holding["average_cost"] = total_cost / total_quantity
                     current_holding["total_quantity"] = total_quantity
                     current_holding["total_cost"] = total_cost
+                    current_holding["currency"] = transaction.currency
                 else:
                     # 初回買付
                     current_holding = {
@@ -248,8 +326,13 @@ class TransactionService:
                     continue
 
                 # 確定損益を計算 (JPYベース)
-                # transaction.settlement_amount は常に受渡金額 (JPY)
-                sell_proceeds_jpy = Decimal(str(transaction.settlement_amount or 0))
+                sell_proceeds_jpy = TransactionService._to_jpy(
+                    transaction.settlement_amount,
+                    transaction.currency,
+                    transaction.exchange_rate,
+                    transaction.transaction_date,
+                    settlement_currency=transaction.settlement_currency,
+                )
                 cost_basis_jpy = Decimal(
                     str(current_holding["average_cost"] or 0)
                 ) * Decimal(str(transaction.quantity or 0))
@@ -279,6 +362,7 @@ class TransactionService:
                 current_holding["total_cost"] = (
                     current_holding["total_quantity"] * current_holding["average_cost"]
                 )
+                current_holding["currency"] = transaction.currency
 
                 # 保有数量が0になった場合
                 if current_holding["total_quantity"] == 0:

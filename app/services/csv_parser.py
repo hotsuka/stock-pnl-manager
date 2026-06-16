@@ -169,7 +169,7 @@ class CSVParser:
             ),
             "quantity": cls.parse_number(normalized_row["quantity"]),
             "unit_price": cls.parse_number(normalized_row["unit_price"]),
-            "commission": cls.parse_number(normalized_row.get("commission", "0")),
+            "commission": cls.parse_number(normalized_row.get("commission") or "0"),
             "settlement_amount": cls.parse_number(
                 normalized_row.get("settlement_amount")
             ),

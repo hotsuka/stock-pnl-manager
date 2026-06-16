@@ -32,7 +32,7 @@ load_dotenv()
 def create_backup(db_path, output_dir, compress=False):
     """データベースのバックアップを作成"""
     # タイムスタンプ
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # 出力ディレクトリを作成
     output_dir = Path(output_dir)
@@ -58,8 +58,9 @@ def create_backup(db_path, output_dir, compress=False):
         if compress:
             # gzipで圧縮
             import gzip
-            with open(db_path, 'rb') as f_in:
-                with gzip.open(backup_path, 'wb') as f_out:
+
+            with open(db_path, "rb") as f_in:
+                with gzip.open(backup_path, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
         else:
             # 通常のコピー
@@ -108,20 +109,20 @@ def cleanup_old_backups(output_dir, keep_days):
         print("[INFO] 削除対象のバックアップはありませんでした")
 
 
-def upload_to_cloud(backup_path, cloud_service='s3'):
+def upload_to_cloud(backup_path, cloud_service="s3"):
     """クラウドストレージにアップロード"""
-    if cloud_service == 's3':
+    if cloud_service == "s3":
         try:
             import boto3
 
-            bucket_name = os.getenv('AWS_S3_BUCKET')
+            bucket_name = os.getenv("AWS_S3_BUCKET")
             if not bucket_name:
                 print("[WARNING] AWS_S3_BUCKET環境変数が設定されていません")
                 return False
 
             print(f"[INFO] AWS S3にアップロード中: {bucket_name}")
 
-            s3_client = boto3.client('s3')
+            s3_client = boto3.client("s3")
             s3_key = f"stock-pnl-backups/{backup_path.name}"
 
             s3_client.upload_file(str(backup_path), bucket_name, s3_key)
@@ -137,11 +138,11 @@ def upload_to_cloud(backup_path, cloud_service='s3'):
             print(f"[ERROR] S3アップロード失敗: {str(e)}")
             return False
 
-    elif cloud_service == 'gcs':
+    elif cloud_service == "gcs":
         try:
             from google.cloud import storage
 
-            bucket_name = os.getenv('GCS_BUCKET')
+            bucket_name = os.getenv("GCS_BUCKET")
             if not bucket_name:
                 print("[WARNING] GCS_BUCKET環境変数が設定されていません")
                 return False
@@ -154,7 +155,9 @@ def upload_to_cloud(backup_path, cloud_service='s3'):
 
             blob.upload_from_filename(str(backup_path))
 
-            print(f"[SUCCESS] GCSアップロード完了: gs://{bucket_name}/stock-pnl-backups/{backup_path.name}")
+            print(
+                f"[SUCCESS] GCSアップロード完了: gs://{bucket_name}/stock-pnl-backups/{backup_path.name}"
+            )
             return True
 
         except ImportError:
@@ -170,7 +173,7 @@ def upload_to_cloud(backup_path, cloud_service='s3'):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stock P&L Manager データベースバックアップツール',
+        description="Stock P&L Manager データベースバックアップツール",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用例:
@@ -185,45 +188,43 @@ def main():
 
     # クラウドにアップロード
     python scripts/backup_database.py --compress --upload-cloud
-        """
+        """,
     )
 
     parser.add_argument(
-        '--output-dir',
-        default='backups',
-        help='バックアップ保存先ディレクトリ（デフォルト: backups）'
+        "--output-dir",
+        default="backups",
+        help="バックアップ保存先ディレクトリ（デフォルト: backups）",
     )
 
     parser.add_argument(
-        '--keep-days',
+        "--keep-days",
         type=int,
         default=30,
-        help='バックアップ保存期間（デフォルト: 30日）'
+        help="バックアップ保存期間（デフォルト: 30日）",
     )
 
     parser.add_argument(
-        '--compress',
-        action='store_true',
-        help='バックアップをgzipで圧縮'
+        "--compress", action="store_true", help="バックアップをgzipで圧縮"
     )
 
     parser.add_argument(
-        '--upload-cloud',
-        action='store_true',
-        help='クラウドストレージにアップロード（AWS S3）'
+        "--upload-cloud",
+        action="store_true",
+        help="クラウドストレージにアップロード（AWS S3）",
     )
 
     parser.add_argument(
-        '--cloud-service',
-        choices=['s3', 'gcs'],
-        default='s3',
-        help='クラウドサービス（デフォルト: s3）'
+        "--cloud-service",
+        choices=["s3", "gcs"],
+        default="s3",
+        help="クラウドサービス（デフォルト: s3）",
     )
 
     parser.add_argument(
-        '--db-path',
-        default='data/stock_pnl.db',
-        help='データベースファイルのパス（デフォルト: data/stock_pnl.db）'
+        "--db-path",
+        default="data/stock_pnl.db",
+        help="データベースファイルのパス（デフォルト: data/stock_pnl.db）",
     )
 
     args = parser.parse_args()
@@ -234,11 +235,7 @@ def main():
     print()
 
     # バックアップ作成
-    backup_path = create_backup(
-        args.db_path,
-        args.output_dir,
-        compress=args.compress
-    )
+    backup_path = create_backup(args.db_path, args.output_dir, compress=args.compress)
 
     if not backup_path:
         sys.exit(1)
@@ -260,5 +257,5 @@ def main():
     print("=" * 60)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

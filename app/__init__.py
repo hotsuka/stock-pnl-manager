@@ -54,11 +54,12 @@ def create_app(config_name=None):
             app.logger.warning(f"自動バックアップ失敗: {e}")
 
     # Register blueprints
-    from app.routes import api, main, upload
+    from app.routes import advisor, api, main, upload
 
     app.register_blueprint(main.bp)
     app.register_blueprint(upload.bp)
     app.register_blueprint(api.bp)
+    app.register_blueprint(advisor.bp)
 
     # Register error handlers
     from app.utils.errors import (

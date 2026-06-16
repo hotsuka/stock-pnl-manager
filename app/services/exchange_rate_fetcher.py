@@ -194,27 +194,44 @@ class ExchangeRateFetcher:
         try:
             ticker = yf.Ticker(pair_symbol)
 
-            # Get history for the date
-            # Add a buffer to ensure we get the date
             if isinstance(date, str):
                 date = datetime.strptime(date, "%Y-%m-%d").date()
 
-            start_date = date
-            end_date = date + timedelta(days=5)  # Buffer for weekends/holidays
+            # 約定日以降を検索（休日・週末対応で+5日バッファ）
+            hist = ticker.history(start=date, end=date + timedelta(days=5))
 
-            hist = ticker.history(start=start_date, end=end_date)
+            if not hist.empty:
+                rate = float(hist["Close"].iloc[0])
+                rate_date = hist.index[0].date()
+            else:
+                # 当日データ未反映の場合、過去5営業日から直近レートを取得
+                hist = ticker.history(
+                    start=date - timedelta(days=7), end=date + timedelta(days=1)
+                )
 
-            if hist.empty:
-                return None
-
-            # Get the first available rate on or after the date
-            rate = float(hist["Close"].iloc[0])
+                if not hist.empty:
+                    rate = float(hist["Close"].iloc[-1])
+                    rate_date = hist.index[-1].date()
+                else:
+                    # それでも取れない場合、現在レートにフォールバック
+                    current = ExchangeRateFetcher.get_exchange_rate(
+                        from_currency, to_currency
+                    )
+                    if current:
+                        return {
+                            "rate": current["rate"],
+                            "from": from_currency,
+                            "to": to_currency,
+                            "date": date,
+                            "pair": pair_symbol,
+                        }
+                    return None
 
             return {
                 "rate": rate,
                 "from": from_currency,
                 "to": to_currency,
-                "date": hist.index[0].date(),
+                "date": rate_date,
                 "pair": pair_symbol,
             }
 

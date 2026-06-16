@@ -680,7 +680,7 @@
             if (aValue === null || aValue === undefined) aValue = '';
             if (bValue === null || bValue === undefined) bValue = '';
 
-            if (typeof aValue === 'string') {
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
                 aValue = aValue.toLowerCase();
                 bValue = bValue.toLowerCase();
             }
@@ -747,8 +747,8 @@
     async function loadMetricsData() {
         console.log('[DEBUG] loadMetricsData 開始');
 
-        // どちらのタブが開かれているか判定
-        const activeTabId = document.querySelector('.nav-link.active').id;
+        // どちらのタブが開かれているか判定（#holdingsTabs内のタブに限定して取得）
+        const activeTabId = document.querySelector('#holdingsTabs .nav-link.active')?.id || '';
         let tbody;
         let colspan;
 

@@ -61,6 +61,10 @@
                         <a class="nav-link {% if request.path == '/price-override' %}active{% endif %}"
                             href="/price-override">株価修正</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.path.startswith('/advisor') %}active{% endif %}"
+                            href="/advisor/">週次アドバイザー</a>
+                    </li>
                 </ul>
             </div>
         </div>
