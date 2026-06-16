@@ -1028,9 +1028,7 @@ def get_realized_pnl():
                 else 0
             )
             sale_unit_price = (
-                total_sell_proceeds_native / total_quantity
-                if total_quantity > 0
-                else 0
+                total_sell_proceeds_native / total_quantity if total_quantity > 0 else 0
             )
         else:
             # JPY銘柄
@@ -1164,7 +1162,9 @@ def get_dashboard_summary():
     ytd_dividends_list = Dividend.query.filter(
         Dividend.ex_dividend_date >= ytd_start
     ).all()
-    ytd_dividends = sum(to_jpy(d.total_dividend, d.currency) for d in ytd_dividends_list)
+    ytd_dividends = sum(
+        to_jpy(d.total_dividend, d.currency) for d in ytd_dividends_list
+    )
 
     # 5c. 年初来含み損益（現在保有中の銘柄のみ：年初比変動）
     # 年初以前から保有→昨年末株価を基準、年初以降に取得→取得コストを基準
