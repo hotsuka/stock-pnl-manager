@@ -523,6 +523,32 @@ def delete_holding(ticker):
         )
 
 
+@bp.route("/holdings/<ticker>/recalculate", methods=["POST"])
+def recalculate_holding(ticker):
+    """指定銘柄の保有情報と確定損益を取引履歴から再計算する"""
+    from app.services import TransactionService
+
+    ticker = ticker.upper()
+    try:
+        log_api_call(logger, f"/holdings/{ticker}/recalculate", "POST")
+        TransactionService.recalculate_holding(ticker)
+        holding = Holding.query.filter_by(ticker_symbol=ticker).first()
+        realized = RealizedPnl.query.filter_by(ticker_symbol=ticker).all()
+        return jsonify(
+            {
+                "success": True,
+                "message": f"{ticker} の再計算が完了しました",
+                "holding": holding.to_dict() if holding else None,
+                "realized_pnl_count": len(realized),
+            }
+        )
+    except Exception as e:
+        return (
+            jsonify({"success": False, "error": f"再計算に失敗しました: {str(e)}"}),
+            500,
+        )
+
+
 @bp.route("/transactions/export", methods=["GET"])
 def export_transactions_csv():
     """Export all transactions as CSV"""
@@ -974,118 +1000,48 @@ def get_realized_pnl():
         # Calculate total quantity sold
         total_quantity = sum(float(r.quantity) for r in realized_pnl_records)
 
-        # Calculate total cost from RealizedPnl records
-        # Note: RealizedPnl.average_cost might be in JPY (incorrect), need to handle this
-        total_cost_from_records = sum(
+        # RealizedPnl.average_cost は常にJPY建て（transaction_service で換算済み）
+        # RealizedPnl.realized_pnl も常にJPY建て（sell_proceeds_jpy - cost_basis_jpy）
+        # RealizedPnl.sell_price は約定通貨建て（USD/KRW/JPY）
+        total_cost_jpy = sum(
             float(r.average_cost) * float(r.quantity) for r in realized_pnl_records
         )
-        total_proceeds_stock_currency = sum(
+        total_realized_pnl_jpy = sum(
+            float(r.realized_pnl) for r in realized_pnl_records
+        )
+        total_sale_proceeds_jpy = total_cost_jpy + total_realized_pnl_jpy
+
+        # 売却単価・平均取得コストを約定通貨建てで計算
+        total_sell_proceeds_native = sum(
             float(r.sell_price) * float(r.quantity) for r in realized_pnl_records
         )
-
-        # Get SELL transactions to get settlement amounts (in JPY)
-        sell_transactions = Transaction.query.filter_by(
-            ticker_symbol=ticker, transaction_type="SELL"
-        ).all()
-
-        # Calculate sale proceeds in JPY from settlement amounts
-        # Note: settlement_amount is always in JPY regardless of settlement_currency value
-        total_sale_proceeds_jpy = sum(
-            float(tx.settlement_amount)
-            for tx in sell_transactions
-            if tx.settlement_amount
-        )
-
-        # For cost, we need to calculate from the RealizedPnl data
-        # The RealizedPnl.average_cost is in JPY for all stocks (due to old data)
-        # We need to convert to the correct currency for non-JPY stocks
-        if currency == "USD":
-            # For US stocks, calculate implied exchange rate from sell transactions
-            # settlement_amount (JPY) / (quantity * sell_price (USD)) = exchange rate
-            total_exchange_rate = 0
-            total_sell_qty = 0
-            for tx in sell_transactions:
-                if tx.settlement_amount and tx.unit_price:
-                    qty = float(tx.quantity)
-                    usd_amount = qty * float(tx.unit_price)
-                    if usd_amount > 0:
-                        implicit_rate = float(tx.settlement_amount) / usd_amount
-                        total_exchange_rate += implicit_rate * qty
-                        total_sell_qty += qty
-
+        if currency in ("USD", "KRW"):
+            # 売却収入JPY ÷ 売却収入（約定通貨）= 平均為替レート
             avg_exchange_rate = (
-                total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 150
+                total_sale_proceeds_jpy / total_sell_proceeds_native
+                if total_sell_proceeds_native > 0
+                else 150
             )
-
-            # total_cost_from_records is in JPY, convert to USD
-            total_cost_usd = total_cost_from_records / avg_exchange_rate
-
-            # Convert back to JPY for total_cost display
-            total_cost_jpy = total_cost_from_records
-
-            # Average unit price in USD
             average_unit_price = (
-                total_cost_usd / total_quantity if total_quantity > 0 else 0
+                (total_cost_jpy / avg_exchange_rate) / total_quantity
+                if total_quantity > 0
+                else 0
             )
-        elif currency == "KRW":
-            # For Korean stocks, similar logic
-            total_exchange_rate = 0
-            total_sell_qty = 0
-            for tx in sell_transactions:
-                if tx.settlement_amount and tx.unit_price:
-                    qty = float(tx.quantity)
-                    krw_amount = qty * float(tx.unit_price)
-                    if krw_amount > 0:
-                        implicit_rate = float(tx.settlement_amount) / krw_amount
-                        total_exchange_rate += implicit_rate * qty
-                        total_sell_qty += qty
-
-            avg_exchange_rate = (
-                total_exchange_rate / total_sell_qty if total_sell_qty > 0 else 0.1
-            )
-
-            # total_cost_from_records is in JPY, convert to KRW
-            total_cost_krw = total_cost_from_records / avg_exchange_rate
-
-            # Keep JPY for total_cost display
-            total_cost_jpy = total_cost_from_records
-
-            # Average unit price in KRW
-            average_unit_price = (
-                total_cost_krw / total_quantity if total_quantity > 0 else 0
+            sale_unit_price = (
+                total_sell_proceeds_native / total_quantity
+                if total_quantity > 0
+                else 0
             )
         else:
-            # For JPY stocks, cost is already in JPY
-            total_cost_jpy = total_cost_from_records
+            # JPY銘柄
             average_unit_price = (
                 total_cost_jpy / total_quantity if total_quantity > 0 else 0
             )
-
-        # Calculate sale unit price in stock's currency
-        if currency == "USD":
-            # For USD stocks, calculate from JPY sale proceeds
-            sale_unit_price = (
-                (total_sale_proceeds_jpy / avg_exchange_rate) / total_quantity
-                if total_quantity > 0
-                else 0
-            )
-        elif currency == "KRW":
-            # For KRW stocks, calculate from JPY sale proceeds
-            sale_unit_price = (
-                (total_sale_proceeds_jpy / avg_exchange_rate) / total_quantity
-                if total_quantity > 0
-                else 0
-            )
-        else:
-            # For JPY stocks, calculate directly
             sale_unit_price = (
                 total_sale_proceeds_jpy / total_quantity if total_quantity > 0 else 0
             )
 
-        # Calculate realized P&L in JPY
-        realized_pnl_jpy = total_sale_proceeds_jpy - total_cost_jpy
-
-        # Calculate P&L percentage
+        realized_pnl_jpy = total_realized_pnl_jpy
         pnl_pct = (realized_pnl_jpy / total_cost_jpy * 100) if total_cost_jpy > 0 else 0
 
         realized_pnl_list.append(
@@ -1188,6 +1144,75 @@ def get_dashboard_summary():
         (total_pnl_jpy / total_investment_jpy * 100) if total_investment_jpy > 0 else 0
     )
 
+    # 5. 年初来損益
+    # - 確定損益：今年に売却したRealizedPnlレコードを直接集計
+    # - 含み損益：現在保有中の銘柄のみを対象に、年初株価（または取得コストの遅い方）と現在時価の差
+    # - 配当：今年の受取配当を直接集計
+    from datetime import date as date_type
+
+    today_date = date_type.today()
+    ytd_start = date_type(today_date.year, 1, 1)
+    prev_year_end = date_type(today_date.year - 1, 12, 31)
+
+    # 5a. 年初来確定損益（今年売却分のみ）
+    ytd_realized_records = RealizedPnl.query.filter(
+        RealizedPnl.sell_date >= ytd_start
+    ).all()
+    ytd_realized_pnl = sum(float(r.realized_pnl or 0) for r in ytd_realized_records)
+
+    # 5b. 年初来配当（今年の受取分のみ）
+    ytd_dividends_list = Dividend.query.filter(
+        Dividend.ex_dividend_date >= ytd_start
+    ).all()
+    ytd_dividends = sum(to_jpy(d.total_dividend, d.currency) for d in ytd_dividends_list)
+
+    # 5c. 年初来含み損益（現在保有中の銘柄のみ：年初比変動）
+    # 年初以前から保有→昨年末株価を基準、年初以降に取得→取得コストを基準
+    ytd_holding_pnl = 0.0
+    for holding in holdings:
+        if not holding.total_quantity or holding.total_quantity <= 0:
+            continue
+
+        current_val = float(holding.current_value or 0)
+        ticker = holding.ticker_symbol
+
+        pre_ytd_buy = Transaction.query.filter(
+            Transaction.ticker_symbol == ticker,
+            Transaction.transaction_type == "BUY",
+            Transaction.transaction_date < ytd_start,
+        ).first()
+
+        if pre_ytd_buy:
+            # 年初以前から保有 → 昨年末の終値を基準価格として使用
+            year_start_price_rec = (
+                StockPrice.query.filter(
+                    StockPrice.ticker_symbol == ticker,
+                    StockPrice.price_date <= prev_year_end,
+                )
+                .order_by(StockPrice.price_date.desc())
+                .first()
+            )
+
+            if year_start_price_rec:
+                ytd_price = float(year_start_price_rec.close_price)
+                qty = float(holding.total_quantity)
+                curr = str(holding.currency or "JPY").strip().upper()
+                if curr in ["JPY", "日本円"]:
+                    ytd_rate = 1.0
+                else:
+                    rate_entry = rates.get(curr)
+                    ytd_rate = float(rate_entry.get("rate", 1.0)) if rate_entry else 1.0
+                ytd_base_value = ytd_price * qty * ytd_rate
+                ytd_holding_pnl += current_val - ytd_base_value
+            else:
+                # 昨年末株価がDBにない場合は取得コスト全体を代用
+                ytd_holding_pnl += current_val - float(holding.total_cost or 0)
+        else:
+            # 全て今年以降に取得 → 取得コスト基準（含み損益全体 = 年初来含み損益）
+            ytd_holding_pnl += current_val - float(holding.total_cost or 0)
+
+    ytd_total = ytd_realized_pnl + ytd_holding_pnl + ytd_dividends
+
     return jsonify(
         {
             "success": True,
@@ -1211,6 +1236,12 @@ def get_dashboard_summary():
                 "total_pnl": {
                     "amount": total_pnl_jpy,
                     "percentage": round(total_pnl_pct, 2),
+                },
+                "ytd_pnl": {
+                    "total": ytd_total,
+                    "realized": ytd_realized_pnl,
+                    "holding": ytd_holding_pnl,
+                    "dividends": ytd_dividends,
                 },
                 "currency": "JPY",
             },
