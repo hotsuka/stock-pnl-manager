@@ -10,7 +10,6 @@ GICS 11セクター統一の分類体系で、以下を提供:
 
 from typing import Optional
 
-
 # GICS 11セクター（標準名）
 GICS_SECTORS = [
     "Information Technology",
@@ -349,6 +348,7 @@ def fetch_edinet_industry(
         EDINET 業種名（例: "輸送用機器"）or None
     """
     import os
+
     import requests
 
     if api_key is None:

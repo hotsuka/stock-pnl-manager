@@ -73,7 +73,7 @@ class WeeklyReviewService:
 
     @staticmethod
     def get_weekly_review(week_end_date: Optional[date] = None) -> WeeklyReviewResult:
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
         JST = timezone(timedelta(hours=9))
         if week_end_date is None:

@@ -245,6 +245,7 @@ class TestTransactionService:
             currency="USD",
             commission=5.0,
             settlement_amount=210005.0,
+            settlement_currency="JPY",
         )
 
         db_session.add(transaction)
