@@ -1193,7 +1193,7 @@ def get_dashboard_summary():
             .scalar()
         )
         if pre_buy_qty <= 0:
-            holding_carried[ticker] = False
+            holding_carried[ticker] = None
             continue
 
         pre_sell_qty = (
@@ -1205,12 +1205,12 @@ def get_dashboard_summary():
             )
             .scalar()
         )
-        pre_position = pre_buy_qty - pre_sell_qty
+        pre_position = float(pre_buy_qty - pre_sell_qty)
         if pre_position <= 0:
-            holding_carried[ticker] = False
+            holding_carried[ticker] = None
             continue
 
-        ytd_sell_qty = (
+        ytd_sell_qty = float(
             db.session.query(sa_func.coalesce(sa_func.sum(Transaction.quantity), 0))
             .filter(
                 Transaction.ticker_symbol == ticker,
@@ -1219,16 +1219,70 @@ def get_dashboard_summary():
             )
             .scalar()
         )
-        carried = ytd_sell_qty < pre_position
-        holding_carried[ticker] = carried
-        if carried:
-            tickers_need_year_end.append(ticker)
+        if ytd_sell_qty >= pre_position:
+            holding_carried[ticker] = None
+            continue
+
+        holding_carried[ticker] = {
+            "pre_position": pre_position,
+            "ytd_sell_qty": ytd_sell_qty,
+        }
+        tickers_need_year_end.append(ticker)
 
     # 年末株価をyfinanceから一括取得（未保存分のみ）
+    check_start = date_type(today_date.year - 1, 12, 15)
     if tickers_need_year_end:
         StockPriceFetcher.ensure_year_end_prices(
             tickers_need_year_end, today_date.year - 1
         )
+
+    # 年末為替レートを取得（外貨建ての継続保有銘柄用）
+    # total_costは購入時FXで換算済みなので、年末ベースラインも年末FXで換算する必要がある
+    year_end_rates = {}
+    ytd_fx_currencies = set()
+    for ticker in tickers_need_year_end:
+        h = next((h for h in holdings if h.ticker_symbol == ticker), None)
+        if h:
+            curr = str(h.currency or "JPY").strip().upper()
+            if curr not in ("JPY", "日本円"):
+                ytd_fx_currencies.add(curr)
+    if ytd_fx_currencies:
+        from datetime import timedelta
+
+        fx_pairs = {"USD": "USDJPY=X", "KRW": "KRWJPY=X"}
+        for curr in ytd_fx_currencies:
+            pair = fx_pairs.get(curr)
+            if not pair:
+                continue
+            fx_rec = (
+                StockPrice.query.filter(
+                    StockPrice.ticker_symbol == pair,
+                    StockPrice.price_date >= check_start,
+                    StockPrice.price_date <= prev_year_end,
+                )
+                .order_by(StockPrice.price_date.desc())
+                .first()
+            )
+            if not fx_rec:
+                try:
+                    StockPriceFetcher.get_historical_prices(
+                        pair,
+                        check_start.isoformat(),
+                        (prev_year_end + timedelta(days=1)).isoformat(),
+                    )
+                    fx_rec = (
+                        StockPrice.query.filter(
+                            StockPrice.ticker_symbol == pair,
+                            StockPrice.price_date >= check_start,
+                            StockPrice.price_date <= prev_year_end,
+                        )
+                        .order_by(StockPrice.price_date.desc())
+                        .first()
+                    )
+                except Exception as e:
+                    logger.warning(f"年末為替レート取得失敗 ({pair}): {e}")
+            if fx_rec:
+                year_end_rates[curr] = float(fx_rec.close_price)
 
     for holding in holdings:
         if not holding.total_quantity or holding.total_quantity <= 0:
@@ -1236,11 +1290,13 @@ def get_dashboard_summary():
 
         current_val = float(holding.current_value or 0)
         ticker = holding.ticker_symbol
+        carried_info = holding_carried.get(ticker)
 
-        if holding_carried.get(ticker):
+        if carried_info:
             year_start_price_rec = (
                 StockPrice.query.filter(
                     StockPrice.ticker_symbol == ticker,
+                    StockPrice.price_date >= check_start,
                     StockPrice.price_date <= prev_year_end,
                 )
                 .order_by(StockPrice.price_date.desc())
@@ -1248,14 +1304,36 @@ def get_dashboard_summary():
             )
             if year_start_price_rec:
                 ytd_price = float(year_start_price_rec.close_price)
-                qty = float(holding.total_quantity)
+                total_qty = float(holding.total_quantity)
+                carried_qty = min(
+                    carried_info["pre_position"] - carried_info["ytd_sell_qty"],
+                    total_qty,
+                )
                 curr = str(holding.currency or "JPY").strip().upper()
                 if curr in ["JPY", "日本円"]:
                     ytd_rate = 1.0
                 else:
-                    rate_entry = rates.get(curr)
-                    ytd_rate = float(rate_entry.get("rate", 1.0)) if rate_entry else 1.0
-                ytd_base_value = ytd_price * qty * ytd_rate
+                    ytd_rate = year_end_rates.get(curr)
+                    if not ytd_rate:
+                        rate_entry = rates.get(curr)
+                        ytd_rate = (
+                            float(rate_entry.get("rate", 1.0)) if rate_entry else 1.0
+                        )
+                ye_base_jpy = ytd_price * carried_qty * ytd_rate
+
+                ytd_buy_cost = float(
+                    db.session.query(
+                        sa_func.coalesce(sa_func.sum(Transaction.settlement_amount), 0)
+                    )
+                    .filter(
+                        Transaction.ticker_symbol == ticker,
+                        Transaction.transaction_type == "BUY",
+                        Transaction.transaction_date >= ytd_start,
+                    )
+                    .scalar()
+                )
+
+                ytd_base_value = ye_base_jpy + ytd_buy_cost
                 ytd_holding_pnl += current_val - ytd_base_value
             else:
                 ytd_holding_pnl += current_val - float(holding.total_cost or 0)
