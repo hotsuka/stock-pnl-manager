@@ -1167,8 +1167,69 @@ def get_dashboard_summary():
     )
 
     # 5c. 年初来含み損益（現在保有中の銘柄のみ：年初比変動）
-    # 年初以前から保有→昨年末株価を基準、年初以降に取得→取得コストを基準
+    # - 年初以前から継続保有 → 昨年末株価を基準
+    # - 年中に全売却→再購入 or 今年新規取得 → 取得コスト基準
+    from sqlalchemy import func as sa_func
+
+    from app import db
+
     ytd_holding_pnl = 0.0
+
+    # 各銘柄のポジション継続状況を判定し、年末株価が必要な銘柄を収集
+    holding_carried = {}
+    tickers_need_year_end = []
+    for holding in holdings:
+        if not holding.total_quantity or holding.total_quantity <= 0:
+            continue
+        ticker = holding.ticker_symbol
+
+        pre_buy_qty = (
+            db.session.query(sa_func.coalesce(sa_func.sum(Transaction.quantity), 0))
+            .filter(
+                Transaction.ticker_symbol == ticker,
+                Transaction.transaction_type == "BUY",
+                Transaction.transaction_date < ytd_start,
+            )
+            .scalar()
+        )
+        if pre_buy_qty <= 0:
+            holding_carried[ticker] = False
+            continue
+
+        pre_sell_qty = (
+            db.session.query(sa_func.coalesce(sa_func.sum(Transaction.quantity), 0))
+            .filter(
+                Transaction.ticker_symbol == ticker,
+                Transaction.transaction_type == "SELL",
+                Transaction.transaction_date < ytd_start,
+            )
+            .scalar()
+        )
+        pre_position = pre_buy_qty - pre_sell_qty
+        if pre_position <= 0:
+            holding_carried[ticker] = False
+            continue
+
+        ytd_sell_qty = (
+            db.session.query(sa_func.coalesce(sa_func.sum(Transaction.quantity), 0))
+            .filter(
+                Transaction.ticker_symbol == ticker,
+                Transaction.transaction_type == "SELL",
+                Transaction.transaction_date >= ytd_start,
+            )
+            .scalar()
+        )
+        carried = ytd_sell_qty < pre_position
+        holding_carried[ticker] = carried
+        if carried:
+            tickers_need_year_end.append(ticker)
+
+    # 年末株価をyfinanceから一括取得（未保存分のみ）
+    if tickers_need_year_end:
+        StockPriceFetcher.ensure_year_end_prices(
+            tickers_need_year_end, today_date.year - 1
+        )
+
     for holding in holdings:
         if not holding.total_quantity or holding.total_quantity <= 0:
             continue
@@ -1176,14 +1237,7 @@ def get_dashboard_summary():
         current_val = float(holding.current_value or 0)
         ticker = holding.ticker_symbol
 
-        pre_ytd_buy = Transaction.query.filter(
-            Transaction.ticker_symbol == ticker,
-            Transaction.transaction_type == "BUY",
-            Transaction.transaction_date < ytd_start,
-        ).first()
-
-        if pre_ytd_buy:
-            # 年初以前から保有 → 昨年末の終値を基準価格として使用
+        if holding_carried.get(ticker):
             year_start_price_rec = (
                 StockPrice.query.filter(
                     StockPrice.ticker_symbol == ticker,
@@ -1192,7 +1246,6 @@ def get_dashboard_summary():
                 .order_by(StockPrice.price_date.desc())
                 .first()
             )
-
             if year_start_price_rec:
                 ytd_price = float(year_start_price_rec.close_price)
                 qty = float(holding.total_quantity)
@@ -1205,31 +1258,8 @@ def get_dashboard_summary():
                 ytd_base_value = ytd_price * qty * ytd_rate
                 ytd_holding_pnl += current_val - ytd_base_value
             else:
-                # 昨年末株価がDBにない場合、年初以降の最初の株価で代用を試みる
-                ytd_fallback_rec = (
-                    StockPrice.query.filter(
-                        StockPrice.ticker_symbol == ticker,
-                        StockPrice.price_date >= ytd_start,
-                    )
-                    .order_by(StockPrice.price_date.asc())
-                    .first()
-                )
-                if ytd_fallback_rec:
-                    ytd_price = float(ytd_fallback_rec.close_price)
-                    qty = float(holding.total_quantity)
-                    curr = str(holding.currency or "JPY").strip().upper()
-                    if curr in ["JPY", "日本円"]:
-                        ytd_rate = 1.0
-                    else:
-                        rate_entry = rates.get(curr)
-                        ytd_rate = (
-                            float(rate_entry.get("rate", 1.0)) if rate_entry else 1.0
-                        )
-                    ytd_base_value = ytd_price * qty * ytd_rate
-                    ytd_holding_pnl += current_val - ytd_base_value
-                # それでもない場合は年初来含み損益に寄与させない（0扱い）
+                ytd_holding_pnl += current_val - float(holding.total_cost or 0)
         else:
-            # 全て今年以降に取得 → 取得コスト基準（含み損益全体 = 年初来含み損益）
             ytd_holding_pnl += current_val - float(holding.total_cost or 0)
 
     ytd_total = ytd_realized_pnl + ytd_holding_pnl + ytd_dividends

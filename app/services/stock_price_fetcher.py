@@ -358,6 +358,43 @@ class StockPriceFetcher:
         return results
 
     @staticmethod
+    def ensure_year_end_prices(ticker_symbols, year):
+        """年末株価がStockPriceテーブルにない銘柄をyfinanceから取得して保存する。
+
+        12/15〜12/31の範囲で最終営業日の終値をキャッシュする。
+        既に該当期間のレコードがある銘柄はスキップされる。
+        """
+        from datetime import date as date_cls
+        from datetime import timedelta
+
+        year_end = date_cls(year, 12, 31)
+        check_start = date_cls(year, 12, 15)
+
+        missing = []
+        for ticker in ticker_symbols:
+            exists = StockPrice.query.filter(
+                StockPrice.ticker_symbol == ticker,
+                StockPrice.price_date >= check_start,
+                StockPrice.price_date <= year_end,
+            ).first()
+            if not exists:
+                missing.append(ticker)
+
+        if not missing:
+            return
+
+        logger.info(f"年末株価を{len(missing)}銘柄分取得中...")
+        for ticker in missing:
+            try:
+                StockPriceFetcher.get_historical_prices(
+                    ticker,
+                    check_start.isoformat(),
+                    (year_end + timedelta(days=1)).isoformat(),
+                )
+            except Exception as e:
+                logger.warning(f"年末株価取得失敗 ({ticker}): {e}")
+
+    @staticmethod
     def get_historical_prices(ticker_symbol, start_date, end_date):
         """
         Get historical prices for a ticker
