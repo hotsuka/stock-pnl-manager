@@ -548,8 +548,9 @@ class PerformanceService:
             # 前月末日を計算
             prev_month_end = month_start - timedelta(days=1)
 
-            # 月末時点の保有状況を計算
+            # 月末時点と前月末時点の保有状況を計算
             holdings_at_month_end = defaultdict(Decimal)
+            holdings_at_prev_month_end = defaultdict(Decimal)
             iter_date = transactions[0].transaction_date
             while iter_date <= month_end:
                 if iter_date in tx_by_date:
@@ -562,6 +563,10 @@ class PerformanceService:
                             holdings_at_month_end[tx.ticker_symbol] -= Decimal(
                                 str(tx.quantity)
                             )
+                if iter_date == prev_month_end:
+                    holdings_at_prev_month_end = defaultdict(
+                        Decimal, holdings_at_month_end
+                    )
                 iter_date += timedelta(days=1)
 
             # 保有損益を計算
@@ -661,13 +666,93 @@ class PerformanceService:
                 # 評価額
                 portfolio_value += float(curr_price) * float(qty) * float(rate)
 
-            # 実現損益を計算
+            # 実現損益を計算（前月までの含み益との二重計上を排除）
             realized_pnl = 0.0
+            prev_remaining = dict(holdings_at_prev_month_end)
+
             for d in range((month_end - month_start).days + 1):
                 check_date = month_start + timedelta(days=d)
                 if check_date in realized_by_date:
                     for r in realized_by_date[check_date]:
-                        realized_pnl += float(r.realized_pnl)
+                        ticker = r.ticker_symbol
+                        yf_t = f"{ticker}.T" if ticker.isdigit() else ticker
+                        sold_qty = Decimal(str(r.quantity))
+
+                        # 段階売却対応: 前月末保有分と当月新規購入分を分離
+                        prev_held = Decimal(str(prev_remaining.get(ticker, 0)))
+                        from_prev = min(sold_qty, max(Decimal(0), prev_held))
+                        from_new = sold_qty - from_prev
+
+                        if ticker in prev_remaining:
+                            prev_remaining[ticker] = float(
+                                max(Decimal(0), prev_held - from_prev)
+                            )
+
+                        adjusted = False
+                        if from_prev > 0 and yf_t in prices_df.columns:
+                            try:
+                                sell_ts = pd.Timestamp(r.sell_date)
+                                sell_indices = prices_df.index.get_indexer(
+                                    [sell_ts], method="pad"
+                                )
+                                sell_idx = sell_indices[0]
+
+                                prev_ts = pd.Timestamp(prev_month_end)
+                                prev_indices = prices_df.index.get_indexer(
+                                    [prev_ts], method="pad"
+                                )
+                                prev_idx = prev_indices[0]
+
+                                if sell_idx >= 0 and prev_idx >= 0:
+                                    sell_date_price = prices_df.iloc[sell_idx][yf_t]
+                                    prev_end_price = prices_df.iloc[prev_idx][yf_t]
+
+                                    if not pd.isna(sell_date_price) and not pd.isna(
+                                        prev_end_price
+                                    ):
+                                        if yf_t.endswith(".T"):
+                                            r_rate = 1.0
+                                        elif yf_t.endswith(".KS"):
+                                            r_rate = 0.11
+                                            if "KRWJPY=X" in prices_df.columns:
+                                                rv = prices_df.iloc[sell_idx][
+                                                    "KRWJPY=X"
+                                                ]
+                                                if not pd.isna(rv) and rv != 0:
+                                                    r_rate = float(rv)
+                                        else:
+                                            r_rate = 150.0
+                                            if "USDJPY=X" in prices_df.columns:
+                                                rv = prices_df.iloc[sell_idx][
+                                                    "USDJPY=X"
+                                                ]
+                                                if not pd.isna(rv) and rv != 0:
+                                                    r_rate = float(rv)
+
+                                        realized_from_prev = (
+                                            (
+                                                float(sell_date_price)
+                                                - float(prev_end_price)
+                                            )
+                                            * float(from_prev)
+                                            * r_rate
+                                        )
+                                        realized_pnl += realized_from_prev
+
+                                        if from_new > 0:
+                                            realized_from_new = (
+                                                float(r.realized_pnl)
+                                                * float(from_new)
+                                                / float(r.quantity)
+                                            )
+                                            realized_pnl += realized_from_new
+
+                                        adjusted = True
+                            except Exception:
+                                pass
+
+                        if not adjusted:
+                            realized_pnl += float(r.realized_pnl)
 
             # 配当を計算
             dividend_income = 0.0
