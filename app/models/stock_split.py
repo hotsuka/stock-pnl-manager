@@ -21,7 +21,9 @@ class StockSplit(db.Model):
     )
 
     def __repr__(self):
-        return f"<StockSplit {self.ticker_symbol} 1:{self.ratio} on {self.effective_date}>"
+        return (
+            f"<StockSplit {self.ticker_symbol} 1:{self.ratio} on {self.effective_date}>"
+        )
 
     def to_dict(self):
         return {
