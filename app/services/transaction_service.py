@@ -5,6 +5,7 @@ from decimal import Decimal
 from app import db
 from app.models.holding import Holding
 from app.models.realized_pnl import RealizedPnl
+from app.models.stock_split import StockSplit
 from app.models.transaction import Transaction
 from app.utils.logger import get_logger, log_database_operation
 
@@ -249,6 +250,15 @@ class TransactionService:
         )
 
     @staticmethod
+    def _apply_split_to_holding(current_holding, split):
+        """分割を保有情報に適用（数量×ratio, 平均単価/ratio, 総コスト不変）"""
+        if not current_holding or current_holding["total_quantity"] <= 0:
+            return
+        ratio = Decimal(str(split.ratio))
+        current_holding["total_quantity"] = current_holding["total_quantity"] * ratio
+        current_holding["average_cost"] = current_holding["average_cost"] / ratio
+
+    @staticmethod
     def recalculate_holding(ticker_symbol):
         """
         指定された銘柄の保有情報を取引履歴から再計算
@@ -274,10 +284,35 @@ class TransactionService:
             db.session.commit()
             return
 
+        # 分割情報を日付順に取得
+        splits = (
+            StockSplit.query.filter_by(ticker_symbol=ticker_symbol)
+            .order_by(StockSplit.effective_date)
+            .all()
+        )
+        split_idx = 0
+
         # 取引を順番に処理して保有情報を再構築
         current_holding = None
+        prev_tx_date = None
 
         for transaction in transactions:
+            # 前回取引〜今回取引の間に発生した分割を適用
+            while split_idx < len(splits):
+                split = splits[split_idx]
+                if prev_tx_date is None:
+                    should_apply = split.effective_date <= transaction.transaction_date
+                else:
+                    should_apply = (
+                        prev_tx_date
+                        < split.effective_date
+                        <= transaction.transaction_date
+                    )
+                if not should_apply:
+                    break
+                TransactionService._apply_split_to_holding(current_holding, split)
+                split_idx += 1
+
             if transaction.transaction_type == "BUY":
                 # 受渡金額をJPYに換算（外国株の為替計算）
                 raw_cost = (
@@ -367,6 +402,15 @@ class TransactionService:
                 # 保有数量が0になった場合
                 if current_holding["total_quantity"] == 0:
                     current_holding = None
+
+            prev_tx_date = transaction.transaction_date
+
+        # 全取引処理後に残りの分割を適用
+        while split_idx < len(splits):
+            TransactionService._apply_split_to_holding(
+                current_holding, splits[split_idx]
+            )
+            split_idx += 1
 
         # 最終的な保有情報を保存
         if current_holding and current_holding["total_quantity"] > 0:
