@@ -77,6 +77,71 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     {% block extra_js %}{% endblock %}
+    <style>
+        /* 並べ替えの見出しはボタンで受ける（キーボード・読み上げでも操作できる。modern-web-guidance: sortable-table） */
+        .th-sort { all: unset; display: inline-block; min-block-size: 24px; cursor: pointer; }
+        .th-sort:focus-visible { outline: 2px solid #0d6efd; outline-offset: 2px; border-radius: 2px; }
+    </style>
+    <script>
+        // 各画面の並べ替えは th の onclick と状態クラス（asc / desc / sort-asc / sort-desc）で作られている。
+        // その仕組みは変えずに、見出しの中身をボタンに包み、状態クラスから aria-sort を付ける。
+        // モーダルの表は並べ替えのたびに描き直されるため、後から足された見出しにも同じ処理をかける。
+        (() => {
+            const syncAriaSort = (th) => {
+                const c = th.classList;
+                if (c.contains('asc') || c.contains('sort-asc')) th.setAttribute('aria-sort', 'ascending');
+                else if (c.contains('desc') || c.contains('sort-desc')) th.setAttribute('aria-sort', 'descending');
+                else th.removeAttribute('aria-sort');
+            };
+
+            const enhance = (th) => {
+                if (th.querySelector(':scope > .th-sort')) return;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'th-sort';
+                while (th.firstChild) btn.appendChild(th.firstChild);
+                th.appendChild(btn);
+                th.scope = 'col';
+                // クリックは th の onclick にそのまま伝わる。onclick が表を描き直してボタンが消えたときだけ、
+                // 同じ列の新しいボタンにフォーカスを戻す（キーボードで続けて操作できるように）
+                btn.addEventListener('click', () => {
+                    const key = th.getAttribute('onclick');
+                    setTimeout(() => {
+                        if (btn.isConnected) return;
+                        scan(document);
+                        const next = [...document.querySelectorAll('thead th[onclick]')]
+                            .find((t) => t.getAttribute('onclick') === key);
+                        const nb = next && next.querySelector(':scope > .th-sort');
+                        if (nb) nb.focus();
+                    }, 0);
+                });
+                syncAriaSort(th);
+            };
+
+            const scan = (root) => {
+                root.querySelectorAll('thead th[onclick]').forEach(enhance);
+            };
+
+            const start = () => {
+                scan(document);
+                new MutationObserver((records) => {
+                    // 行の描き直しと見出しのクラス変更は同じ回に届くので、全件を見てから見出しを足す
+                    let added = false;
+                    for (const r of records) {
+                        if (r.type === 'attributes') {
+                            if (r.target.matches('thead th[onclick]')) syncAriaSort(r.target);
+                        } else if (r.addedNodes.length) {
+                            added = true;
+                        }
+                    }
+                    if (added) scan(document);
+                }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+            };
+
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+            else start();
+        })();
+    </script>
 </body>
 
 </html>
